@@ -205,7 +205,7 @@ Mọi hàm âm thanh đều thoát sớm khi `isMuted`, và gọi `init()` để
 |---|---|---|---|---|---|
 | FN-SRV-01 | `extractClientIp(req)` | Lấy IP sạch từ `x-forwarded-for` hoặc socket, bỏ tiền tố IPv6 | `req` → `string` | Tin tưởng header, dễ bị giả | NET-03 |
 | FN-SRV-02 | `resolveHostname(ip)` | Reverse DNS (timeout 1.5 giây), có cache `Map`; localhost → "Máy Chủ (Host)" | `ip` → `Promise<string>` | `config.ENABLE_REVERSE_DNS` | NET-03 |
-| FN-SRV-03 | Bộ xử lý HTTP | Phục vụ file tĩnh, `GET /api/my-info`, `OPTIONS` (CORS `*`), chặn path traversal, chặn `tools/` (Cat Lab) với kết nối không phải localhost (`isLoopback`) | — | Phục vụ mọi file trong thư mục dự án (kể cả `.git/`) | NET-01 |
+| FN-SRV-03 | Bộ xử lý HTTP | Phục vụ file tĩnh, `GET /api/my-info`, `OPTIONS` (CORS `*`), chặn path traversal | — | Phục vụ mọi file trong thư mục dự án (kể cả `.git/`) | NET-01 |
 | FN-SRV-04 | `wss.on('connection')` | Gán `clientId`, lưu thông tin, gửi `welcome`, broadcast `system_broadcast` | — | `connectedClients` | NET-02, NET-09 |
 | FN-SRV-05 | `ws.on('message')` | Xử lý `set_nickname` (cắt 30 ký tự) và `action` (dựng `action_broadcast` rồi phát cho mọi máy) | — | Không xác thực, không giới hạn tần suất; `detail` chuyển nguyên văn | NET-04, NET-05 |
 | FN-SRV-06 | `broadcast(messageObj)` | Gửi JSON tới mọi socket đang mở | → — | | NET-05 |

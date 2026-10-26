@@ -243,7 +243,7 @@ render3DCatLoaf ─► bóng đổ ─► biến đổi thân (lift/stretch/crou
 | 7 | `pet(isClick)` trả kết quả: vuốt nhẹ khi ngủ không đánh thức, bấm thì giật mình, vuốt quá lâu thì cáu; `slowBlinkAtCat()` | `game-state.js` | ✅ |
 | 8 | Lời chào khi quay lại dùng `GREETING` | `game-state.js` | ✅ |
 | 9 | Bong bóng thoại cho trạng thái mới, nút "Nháy mắt" | `app.js`, `index.html` | ✅ |
-| 10 | Cat Lab `tools/cat-lab.html`: chạy trên bản nháp hoặc bản chính, so sánh song song; nút tương tác nhanh (vuốt với kết quả chọn được, bấm, cho ăn, đá bóng, chớp mắt, đồ chơi), dừng/từng khung/tốc độ/phát lại, phím tắt, chỉnh rig bằng thanh trượt và xuất đoạn `rig: {...}`; `node tools/lab-sync.js draft/status/apply`. **Chỉ local**: `tools/` không commit, server chặn `tools/` với máy khác | `tools/` (local), `server.js`, `.gitignore` | ✅ |
+| 10 | Cat Lab `tools/cat-lab.html`: chạy trên bản nháp hoặc bản chính, so sánh song song; nút tương tác nhanh (vuốt với kết quả chọn được, bấm, cho ăn, đá bóng, chớp mắt, đồ chơi), dừng/từng khung/tốc độ/phát lại, phím tắt, chỉnh rig bằng thanh trượt và xuất đoạn `rig: {...}`; `node tools/lab-sync.js draft/status/apply`. `tools/` không commit (chỉ có trên máy chạy server), xem được qua LAN | `tools/` (local), `.gitignore` | ✅ |
 | 11 | Cập nhật Feature List, Function List, CLAUDE.md | `docs/` | ✅ |
 
 ### 5.3 Kiểm tra

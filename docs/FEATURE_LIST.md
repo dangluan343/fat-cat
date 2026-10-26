@@ -139,7 +139,7 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | REN-10 | Chân và thân | Cẳng chân trước, bàn chân có ngón, đệm thịt; đùi sau và chân sau; 8 tư thế chân (gập, nhồi bột, duỗi, ngửa, xin ăn, liếm, rửa mặt, vồ) | S | ✅ Done | FN-REN-19, FN-REN-20, FN-REN-26..28 | |
 | REN-11 | Đuôi tham số | Dựng/hạ, xù, vẫy/quất theo rig; sọc theo đường cong; cuộn quanh người khi ngủ | S | ✅ Done | FN-REN-18 | |
 | REN-12 | Biến đổi thân | Nhảy lên, kéo dài, hạ thấp rình mồi, lắc lư; chu kỳ rình → vồ khi chơi | S | ✅ Done | FN-REN-12, FN-REN-23 | |
-| REN-13 | Cat Lab (thử animation trước khi áp dụng) | `tools/cat-lab.html`: bản nháp / bản chính / so sánh song song; 24 trạng thái dạng lưới hoặc phóng to; nút tương tác nhanh và phím tắt; dừng, từng khung, tốc độ; chỉnh rig bằng thanh trượt và xuất `rig: {...}`. `node tools/lab-sync.js draft/status/apply` quản lý bản nháp | S | ✅ Done | FN-SRV-03 | **Chỉ local**: `tools/` không commit; server trả 403 cho `tools/` khi kết nối không từ localhost. Quy trình trong CLAUDE.md |
+| REN-13 | Cat Lab (thử animation trước khi áp dụng) | `tools/cat-lab.html`: bản nháp / bản chính / so sánh song song; 24 trạng thái dạng lưới hoặc phóng to; nút tương tác nhanh và phím tắt; dừng, từng khung, tốc độ; chỉnh rig bằng thanh trượt và xuất `rig: {...}`. `node tools/lab-sync.js draft/status/apply` quản lý bản nháp | S | ✅ Done | FN-SRV-03 | `tools/` không commit (chỉ có trên máy chạy server); chia sẻ trong LAN qua `http://<IP LAN>:3333/tools/cat-lab.html`. Quy trình trong CLAUDE.md |
 
 ## 8. AUD — Âm thanh
 

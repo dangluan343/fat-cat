@@ -25,9 +25,9 @@ Game nuôi mèo ảo 2D chạy trên trình duyệt, kèm server Node.js nhỏ �
 
 Không sửa trực tiếp `cat-renderer.js` để thử nghiệm. Thử trên **bản nháp**, so sánh với bản chính, chỉ áp dụng khi đã ưng.
 
-**Cat Lab chỉ tồn tại và chỉ chạy trên máy local:**
+**Cat Lab chỉ tồn tại trên máy chạy server, nhưng chia sẻ được trong mạng LAN:**
 - Thư mục `tools/` (Cat Lab, `lab-sync.js`, bản nháp) nằm trong `.gitignore`, **không bao giờ commit/push**. Máy khác clone repo sẽ không có công cụ này.
-- Server trả 403 cho mọi đường dẫn trong `tools/` nếu kết nối không đến từ chính máy chạy server (kiểm tra địa chỉ socket, không tin `x-forwarded-for`). Đồng nghiệp mở `http://<IP LAN>:3333/tools/...` sẽ bị chặn; chỉ mở bằng `http://localhost:3333/tools/cat-lab.html`.
+- Đồng nghiệp cùng mạng mở được Cat Lab qua `http://<IP LAN>:3333/tools/cat-lab.html` để xem/so sánh (theo yêu cầu 2026-10-26; trước đó server chặn `tools/` với máy khác). Họ thấy đúng bản nháp đang có trên máy này. Chỉ máy này sửa và áp dụng bản nháp được.
 - Đừng thêm script npm hay tham chiếu nào trong code game tới `tools/`.
 
 ```bash
@@ -66,7 +66,7 @@ npm start        # = node server.js
 - Server in ra link chia sẻ `http://<SERVER_IP>:3333`. `SERVER_IP` chỉ là chuỗi gõ tay trong `config.js` để hiển thị link, **không** được tự dò. Đổi mạng WiFi thì phải sửa tay.
 - Server nghe `0.0.0.0`, và phục vụ file tĩnh với `Cache-Control: no-cache`, nên sửa frontend chỉ cần F5, không cần restart. Sửa `server.js` hoặc `config.js` thì phải restart.
 - `npm test` chỉ là placeholder, thất bại có chủ đích. Kiểm tra cú pháp nhanh: `node --check app.js` (làm tương tự với `game-state.js`, `server.js`).
-- Cat Lab (công cụ phát triển, **chỉ local**, không có trong repo): http://localhost:3333/tools/cat-lab.html. Lệnh bản nháp: `node tools/lab-sync.js draft | status | apply`.
+- Cat Lab (công cụ phát triển, không có trong repo): http://localhost:3333/tools/cat-lab.html; chia sẻ trong LAN: `http://<IP LAN>:3333/tools/cat-lab.html`. Lệnh bản nháp: `node tools/lab-sync.js draft | status | apply`.
 
 ## Cấu trúc file
 

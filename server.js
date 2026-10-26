@@ -17,12 +17,6 @@ const config = require('./config.js');
 
 const PORT = config.PORT || 3000;
 const PUBLIC_DIR = __dirname;
-const TOOLS_DIR = path.join(PUBLIC_DIR, 'tools');
-
-// Kết nối từ chính máy này (localhost IPv4/IPv6)
-function isLoopback(addr) {
-  return addr === '::1' || /^(::ffff:)?127\./.test(addr || '');
-}
 
 // MIME types thông dụng
 const MIME_TYPES = {
@@ -133,14 +127,6 @@ const server = http.createServer((req, res) => {
   if (!filePath.startsWith(PUBLIC_DIR)) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('403 Forbidden');
-    return;
-  }
-
-  // Công cụ phát triển (Cat Lab) chỉ mở cho chính máy chạy server. Dùng địa chỉ socket thật,
-  // không dùng x-forwarded-for vì header đó giả được.
-  if (filePath.startsWith(TOOLS_DIR) && !isLoopback(req.socket.remoteAddress)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('403 Forbidden: Cat Lab chỉ dùng trên máy local (http://localhost)');
     return;
   }
 
