@@ -41,8 +41,13 @@ const RIG_DEFAULTS = {
   bodyLift: 0,        // dịch thân theo chiều dọc (âm = nhảy lên)
   bodyStretch: 0,     // kéo dài thân (vươn vai, vồ)
   crouch: 0,          // 0 bình thường ... 1 hạ thấp người rình mồi
-  bodyRock: 0         // lắc lư thân (lăn lộn)
+  bodyRock: 0,        // lắc lư thân (lăn lộn)
+  stand: 0            // 0 nằm loaf ... 1 đứng bốn chân (đi dạo); chân mọc dần khi đứng dậy
 };
+
+// Đứng dậy nâng thân lên bao nhiêu (đơn vị thân) và tốc độ đi dạo (px/giây ở scale 1)
+const STAND_LIFT = 26;
+const WALK_SPEED = 38;
 
 // Kiểu rời rạc (mắt, miệng, chân, đuôi) + đích rig cho từng trạng thái hành vi.
 // eyes: open | happy | closed | squeeze | kawaii
@@ -107,7 +112,11 @@ const CAT_EXPRESSIONS = {
       bodyStretch: 0.05, crouch: 0.15 } },
   HISS: { eyes: 'open', mouth: 'hiss', paws: 'tucked', tail: 'up', noseWrinkle: true,
     rig: { eyeOpen: 1.1, lidTilt: -0.75, pupil: 0.92, mouthOpen: 1, blush: 0, whisker: -1, earRot: 0.45, earFlat: 0.9,
-      headDX: -5, headDY: -3, headTilt: -0.1, tailRaise: 0.75, tailPuff: 1, tailSwayAmp: 4, tailSwaySpeed: 10, bodyLift: -4 } }
+      headDX: -5, headDY: -3, headTilt: -0.1, tailRaise: 0.75, tailPuff: 1, tailSwayAmp: 4, tailSwaySpeed: 10, bodyLift: -4 } },
+
+  // Đi dạo chậm qua lại trên thảm: đứng bốn chân, đuôi dựng, nhìn về phía trước
+  WALKING: { eyes: 'open', mouth: 'smile', paws: 'walk', tail: 'up', look: { x: 0.8, y: 0.1 },
+    rig: { stand: 1, tailRaise: 0.95, tailSwayAmp: 8, tailSwaySpeed: 2.6, headTilt: 0.04, whisker: 0.2, earRot: -0.05 } }
 };
 
 // Trạng thái thù địch: không nhận vuốt, không rù rù, không phản ứng với đồ ăn
@@ -137,9 +146,6 @@ const ROOM_BG = {
   height: 768,
   rug: { x: 730, y: 632, rx: 360, ry: 66 }
 };
-
-// Khung bao mèo quanh gốc toạ độ (đơn vị trước khi nhân scale), gồm đuôi và tai
-const CAT_BOUNDS = { left: -140, top: -100, right: 125, bottom: 62 };
 
 class CatRenderer {
   constructor(canvasId) {
@@ -184,6 +190,11 @@ class CatRenderer {
     this.zoomiesProgress = 0;
     this.zoomiesSpeed = 750;
     this.zoomiesDir = 1;
+
+    // Đi dạo: hướng mặt (1 phải, -1 trái, giữ nguyên khi dừng), nhịp bước, điểm đến
+    this.facing = 1;
+    this.walkPhase = 0;
+    this.walkTargetX = null;
 
     // Đồ chơi
     this.yarnBall = { x: this.baseX - 180, y: this.baseY + 55, vx: 0, vy: 0, radius: 24, rotation: 0 };
@@ -254,8 +265,8 @@ class CatRenderer {
     this.yarnBall.vy = 0;
   }
 
-  // Đặt mèo nằm trên tấm thảm của ảnh nền. Thử nhiều điểm trên thảm, chọn điểm mà mèo
-  // ít bị các khối UI che nhất (getBlockedRects do app.js cung cấp), ưu tiên gần giữa thảm.
+  // Vị trí mặc định: mèo nằm chính giữa tấm thảm của ảnh nền. Đi dạo xong thì nằm lại chỗ dừng
+  // cho tới lần resize kế tiếp.
   layoutOnRug() {
     const W = this.width;
     const H = this.height;
@@ -272,47 +283,15 @@ class CatRenderer {
     this.scale = Math.max(0.7, Math.min(1.9, cover * 1.2));
     const s = this.scale;
 
-    const canvasRect = this.canvas.getBoundingClientRect();
-    const blocked = (this.getBlockedRects ? this.getBlockedRects() : []).map(r => ({
-      left: r.left - canvasRect.left,
-      top: r.top - canvasRect.top,
-      right: r.right - canvasRect.left,
-      bottom: r.bottom - canvasRect.top
-    }));
-
-    let best = null;
-    for (let u = -0.8; u <= 0.81; u += 0.2) {
-      for (let v = -0.6; v <= 0.61; v += 0.3) {
-        // Điểm tiếp đất (tâm bóng đổ) nằm trên thảm; gốc mèo lệch so với bóng đổ (-10, 44)
-        const ox = cx + u * rx + 10 * s;
-        const oy = cy + v * ry - 44 * s;
-        const box = {
-          left: ox + CAT_BOUNDS.left * s,
-          top: oy + CAT_BOUNDS.top * s,
-          right: ox + CAT_BOUNDS.right * s,
-          bottom: oy + CAT_BOUNDS.bottom * s
-        };
-        const area = (box.right - box.left) * (box.bottom - box.top);
-        let cost = 0;
-        blocked.forEach(b => {
-          const w = Math.min(box.right, b.right) - Math.max(box.left, b.left);
-          const h = Math.min(box.bottom, b.bottom) - Math.max(box.top, b.top);
-          if (w > 0 && h > 0) cost += w * h;
-        });
-        // Phần mèo ra ngoài màn hình tính nặng gấp đôi
-        const inW = Math.max(0, Math.min(box.right, W) - Math.max(box.left, 0));
-        const inH = Math.max(0, Math.min(box.bottom, H) - Math.max(box.top, 0));
-        cost += (area - inW * inH) * 2;
-        // Ưu tiên gần giữa thảm khi mức bị che như nhau
-        cost += Math.hypot(u, v) * area * 0.01;
-        if (!best || cost < best.cost) best = { cost, ox, oy };
-      }
-    }
-    this.baseX = best.ox;
-    this.baseY = best.oy;
-    // Zoomies chạy ngang trong phạm vi tấm thảm
+    // Tâm bóng đổ (điểm tiếp đất) trùng tâm thảm; gốc mèo lệch so với bóng đổ (-10, 44)
+    this.baseX = cx + 10 * s;
+    this.baseY = cy - 44 * s;
+    // Zoomies chạy ngang trong phạm vi tấm thảm; đi dạo trong khoảng giữa thảm
     this.runLeft = Math.max(cx - rx * 0.9, 0);
     this.runRight = Math.min(cx + rx * 0.9, W);
+    this.walkLeft = Math.max(cx - rx * 0.5 + 10 * s, 0);
+    this.walkRight = Math.min(cx + rx * 0.5 + 10 * s, W);
+    this.walkTargetX = null;
   }
 
   initEvents() {
@@ -359,7 +338,7 @@ class CatRenderer {
           this.yarnBall.vy = -200;
           if (window.catAudio) window.catAudio.squeak();
           // Mèo đang rảnh thì nghiêng đầu tò mò nhìn bóng len
-          if (window.gameState && window.gameState.behaviorState === 'IDLE') {
+          if (window.gameState && ['IDLE', 'WALKING'].includes(window.gameState.behaviorState)) {
             window.gameState.setBehavior('CURIOUS', 2.8);
           }
           // Nhiệm vụ ngày "Đá bóng len" (lab dùng gameState giả nên có thể không có hàm này)
@@ -442,6 +421,9 @@ class CatRenderer {
   }
 
   dropFood(foodType) {
+    // Đĩa ăn đặt cạnh chỗ mèo đang nằm (mèo có thể đã đi dạo khỏi giữa thảm)
+    this.foodBowl.x = this.x - 150 * this.scale * (this.renderFacing || 1);
+    this.foodBowl.y = this.baseY + 45 * this.scale;
     this.foodBowl.active = true;
     this.foodBowl.foodType = foodType;
     this.foodBowl.timer = 9.0;
@@ -510,6 +492,8 @@ class CatRenderer {
 
     // Rig biểu cảm: đếm thời gian trong trạng thái và nội suy về đích
     if (state !== this.prevState) {
+      // Dừng đi dạo (vì tương tác hay hết giờ) thì nằm lại ngay chỗ đang đứng
+      if (this.prevState === 'WALKING') this.baseX = this.x;
       this.prevState = state;
       this.stateTime = 0;
       this.onStateEnter(state);
@@ -540,7 +524,27 @@ class CatRenderer {
 
     this.updateToys(delta, state);
 
-    if (state === 'ZOOMIES') {
+    if (state === 'WALKING') {
+      // Đi chậm qua lại giữa hai nửa thảm; đang có đồ ăn kéo tới thì đứng lại chờ
+      const left = this.walkLeft ?? this.width * 0.35;
+      const right = this.walkRight ?? this.width * 0.65;
+      const mid = (left + right) / 2;
+      if (this.walkTargetX === null || this.walkTargetX < left || this.walkTargetX > right) {
+        this.walkTargetX = this.x < mid ? mid + Math.random() * (right - mid) : left + Math.random() * (mid - left);
+      }
+      if (!this.foodDrag) {
+        const dx = this.walkTargetX - this.x;
+        if (Math.abs(dx) < 3) {
+          // Tới nơi: chọn điểm mới ở nửa thảm bên kia
+          this.walkTargetX = this.x < mid ? mid + Math.random() * (right - mid) : left + Math.random() * (mid - left);
+        } else {
+          this.facing = Math.sign(dx);
+          this.x += this.facing * Math.min(Math.abs(dx), WALK_SPEED * this.scale * delta);
+        }
+        this.walkPhase += delta * 6;
+      }
+      this.y += (this.baseY - this.y) * 0.1;
+    } else if (state === 'ZOOMIES') {
       this.x += this.zoomiesDir * this.zoomiesSpeed * delta;
       if (this.x > (this.runRight ?? this.width * 0.78)) {
         this.zoomiesDir = -1;
@@ -569,7 +573,7 @@ class CatRenderer {
 
     const bubble = document.getElementById('cat-speech-bubble');
     if (bubble) {
-      const bx = this.x + 45 * this.scale;
+      const bx = this.x + 45 * this.scale * (this.renderFacing || 1);
       const by = this.y - 78 * this.scale;
       bubble.style.left = `${bx}px`;
       bubble.style.top = `${by}px`;
@@ -823,6 +827,13 @@ class CatRenderer {
           target.bodyLift = -8;
         }
         break;
+      case 'WALKING':
+        // Đầu nhấp nhô và thân nảy nhẹ theo nhịp bước (đứng yên chờ đồ ăn thì thôi)
+        if (!this.foodDrag) {
+          target.headDY = Math.sin(this.walkPhase * 2) * 1.5;
+          target.bodyLift = -Math.abs(Math.sin(this.walkPhase)) * 2;
+        }
+        break;
       case 'PLAYING': {
         // Rình (lắc mông) → vồ → tiếp đất, lặp mỗi 3.2 giây
         const c = t % 3.2;
@@ -863,7 +874,7 @@ class CatRenderer {
   onStateEnter(state) {
     const mark = STATE_MARKERS[state];
     if (!mark) return;
-    this.spawnParticle('mark', this.x + 95 * this.scale, this.y - 100 * this.scale, {
+    this.spawnParticle('mark', this.x + 95 * this.scale * (this.renderFacing || 1), this.y - 100 * this.scale, {
       text: mark,
       size: 30 * this.scale,
       vx: 0,
@@ -896,9 +907,9 @@ class CatRenderer {
     const breathY = this.breathCycle * 0.022;
     ctx.scale(this.squishX * s, (this.squishY + breathY) * s);
 
-    if (state === 'ZOOMIES') {
-      ctx.scale(this.zoomiesDir, 1);
-    }
+    // Quay mặt theo hướng chạy/đi (mặc định mặt hướng sang phải)
+    this.renderFacing = state === 'ZOOMIES' ? this.zoomiesDir : this.facing;
+    ctx.scale(this.renderFacing, 1);
 
     // 1. Bóng đổ nằm trên sàn, thu nhỏ khi mèo nhảy lên
     const shadowScale = 1 + Math.min(0, rig.bodyLift) / 140;
@@ -920,7 +931,7 @@ class CatRenderer {
     }
 
     // Biến đổi toàn thân: nhảy, kéo dài, hạ thấp rình mồi, lắc lư
-    ctx.translate(0, rig.bodyLift + rig.crouch * 12);
+    ctx.translate(0, rig.bodyLift + rig.crouch * 12 - rig.stand * STAND_LIFT);
     ctx.scale(1 + rig.bodyStretch, 1 - rig.crouch * 0.14);
     if (rig.bodyRock > 0.01) {
       ctx.rotate(Math.sin(this.time * 3.2) * 0.08 * rig.bodyRock);
@@ -934,6 +945,7 @@ class CatRenderer {
 
     // 2-3. Đuôi sau thân; riêng đuôi cuộn khi ngủ quấn ra trước thân
     if (expr.tail !== 'curl') this.render3DTail(ctx, p, expr);
+    if (rig.stand > 0.05) this.renderWalkLegs(ctx, p);
     this.render3DBody(ctx, p, state);
     if (expr.tail === 'curl') this.render3DTail(ctx, p, expr);
 
@@ -1108,7 +1120,7 @@ class CatRenderer {
     ctx.stroke();
 
     // Bàn chân sau thò ra dưới đùi
-    this.drawPaw(ctx, -60, 45, 16, 9, -0.08, p, { toes: true });
+    if (this.rig.stand < 0.3) this.drawPaw(ctx, -60, 45, 16, 9, -0.08, p, { toes: true });
 
     ctx.restore();
   }
@@ -1148,6 +1160,30 @@ class CatRenderer {
     }
 
     ctx.restore();
+  }
+
+  // Bốn chân khi đứng/đi (vẽ trước thân để thân che phần trên). Chân phía xa tối hơn,
+  // bước theo cặp chéo; độ dài chân theo rig.stand nên chân mọc dần khi đứng dậy
+  renderWalkLegs(ctx, p) {
+    const stand = this.rig.stand;
+    const floorY = 44 + STAND_LIFT * stand - 2;
+    const legs = [
+      { x: -60, far: true, offset: 0 },
+      { x: 50, far: true, offset: Math.PI },
+      { x: -36, far: false, offset: Math.PI },
+      { x: 76, far: false, offset: 0 }
+    ];
+    legs.forEach(leg => {
+      const phase = this.walkPhase + leg.offset;
+      const footX = leg.x + Math.sin(phase) * 9 * stand;
+      const lift = Math.max(0, -Math.cos(phase)) * 5 * stand;
+      const footY = floorY - lift;
+      ctx.save();
+      if (leg.far) ctx.filter = 'brightness(0.82)';
+      this.drawForeleg(ctx, leg.x, 26, footX, footY - 6, p, 20);
+      this.drawPaw(ctx, footX, footY - 3, 14, 8, 0, p, { toes: true });
+      ctx.restore();
+    });
   }
 
   // Cẳng chân trước: dải lông trắng có viền, nối vai với bàn chân
@@ -1218,7 +1254,7 @@ class CatRenderer {
         this.drawPaw(ctx, 74, 46 + right, 20, 13 - Math.max(0, right) * 0.2, 0.08, p, { toes: true });
       } else {
         // Các tư thế giơ một chân: chân còn lại vẫn đặt trên sàn
-        if (pose !== 'beg' && pose !== 'up') {
+        if (pose !== 'beg' && pose !== 'up' && pose !== 'walk') {
           this.drawForeleg(ctx, 74, 26, 74, 39, p, 24);
           this.drawPaw(ctx, 74, 46, 20, 13, 0.08, p, { toes: true });
         }
@@ -1565,14 +1601,16 @@ class CatRenderer {
       lookX = look.x * maxLook;
       lookY = look.y * maxLook;
     } else {
+      // Toạ độ mắt trên màn hình (tính cả hướng mặt), rồi đổi hướng nhìn về toạ độ cục bộ
       const s = this.scale;
-      const gx = this.x + (CAT_HEAD.x + rig.headDX + cx) * s;
+      const facing = this.renderFacing || 1;
+      const gx = this.x + facing * (CAT_HEAD.x + rig.headDX + cx) * s;
       const gy = this.y + (CAT_HEAD.y + rig.headDY + cy) * s;
       const dx = this.mouseX - gx;
       const dy = this.mouseY - gy;
       const dist = Math.hypot(dx, dy);
       if (dist > 0) {
-        lookX = (dx / dist) * Math.min(dist * 0.05, maxLook);
+        lookX = facing * (dx / dist) * Math.min(dist * 0.05, maxLook);
         lookY = (dy / dist) * Math.min(dist * 0.05, maxLook);
       }
     }

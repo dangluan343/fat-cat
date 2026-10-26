@@ -38,6 +38,13 @@ const VITAL_MOODS = {
   HISS_AFTER_PETS: 6     // vẫn bị vuốt ngần này lần trong lúc cáu thì rít (~1.5 giây rê chuột)
 };
 
+// Đi dạo: thời lượng một lượt; các trạng thái sau thì không tự đi tiếp (ngủ, mệt, ốm, đói, dỗi)
+const WALK_CONFIG = {
+  MIN_SECONDS: 8,
+  MAX_SECONDS: 16,
+  NO_RESUME_STATES: ['SLEEPING', 'EXHAUSTED', 'SICK', 'STARVING', 'SULKING', 'BEGGING']
+};
+
 // Trạng thái AI tự trị không được ngắt giữa chừng
 const UNINTERRUPTIBLE_STATES = ['PETTING', 'PLAYING', 'EATING', 'ANNOYED', 'HISS', 'SURPRISED', 'GREETING', 'FULL'];
 
@@ -176,13 +183,14 @@ class CatGameState {
     // Autonomous behavior state
     // 'IDLE', 'PETTING', 'SLEEPING', 'YAWNING', 'LICKING_PAW', 'ROLLING', 'BEGGING', 'EATING', 'PLAYING', 'ZOOMIES', 'SULKING',
     // 'SLOW_BLINK', 'CURIOUS', 'SURPRISED', 'ANNOYED', 'KNEADING', 'BLEP', 'GREETING', 'GROOMING',
-    // 'SICK', 'EXHAUSTED', 'STARVING', 'FULL', 'HISS'
+    // 'SICK', 'EXHAUSTED', 'STARVING', 'FULL', 'HISS', 'WALKING'
     // Hình dạng từng trạng thái: CAT_EXPRESSIONS trong cat-renderer.js
     this.behaviorState = 'IDLE';
     this.stateTimer = 0;
     this.petTimes = [];        // mốc thời gian các lần vuốt gần đây (phát hiện vuốt quá lâu)
     this.annoyedPets = 0;      // số lần bị vuốt tiếp trong lúc đang cáu
     this.nextBehavior = null;  // trạng thái nối tiếp khi trạng thái hiện tại hết giờ (ví dụ ăn xong → no căng)
+    this.resumeWalk = false;   // đang đi dạo thì bị chen ngang: xong việc thì đi tiếp
     this.lastSlowBlinkAt = 0;
     this.nextAutonomousActionTimer = 8; // seconds
 
@@ -339,6 +347,13 @@ class CatGameState {
   }
 
   setBehavior(state, duration = 4) {
+    // Đang đi dạo mà bị tương tác/phản ứng chen ngang thì xong việc đó sẽ đi tiếp
+    if (this.behaviorState === 'WALKING' && state !== 'WALKING') {
+      this.resumeWalk = state !== 'IDLE' && !WALK_CONFIG.NO_RESUME_STATES.includes(state);
+    } else if (state === 'WALKING' || state === 'IDLE' || WALK_CONFIG.NO_RESUME_STATES.includes(state)) {
+      // Bắt đầu đi lại (đã "đi tiếp") hoặc chuyển sang nằm/nghỉ: không còn gì để đi tiếp
+      this.resumeWalk = false;
+    }
     this.behaviorState = state;
     this.stateTimer = duration;
     this.nextBehavior = null; // đổi trạng thái thì bỏ trạng thái nối tiếp cũ
@@ -415,6 +430,9 @@ class CatGameState {
       case 'HISS':
         this.setAction('Đang rít', 'Khè! Đã bảo dừng tay rồi mà 😾');
         break;
+      case 'WALKING':
+        this.setAction('Đang đi dạo', 'Thong thả dạo quanh tấm thảm 🐾');
+        break;
       default:
         this.setAction('Đang thư giãn', 'Lim dim ngắm cảnh bên khung cửa sổ ~');
         break;
@@ -431,6 +449,8 @@ class CatGameState {
           const next = this.nextBehavior;
           if (next) {
             this.setBehavior(next.state, next.duration);
+          } else if (this.resumeWalk) {
+            this.startWalking();
           } else {
             this.setBehavior('IDLE', 0);
           }
@@ -492,11 +512,13 @@ class CatGameState {
       }
 
       // Random spontaneous cute actions; mèo vui có thêm nháy mắt chậm và nhồi bột
-      const choices = ['YAWNING', 'LICKING_PAW', 'GROOMING', 'ROLLING', 'CURIOUS', 'BLEP', 'IDLE', 'IDLE'];
+      const choices = ['YAWNING', 'LICKING_PAW', 'GROOMING', 'ROLLING', 'CURIOUS', 'BLEP', 'IDLE', 'IDLE', 'WALKING', 'WALKING'];
       if (this.data.vitals.happiness > 65) choices.push('SLOW_BLINK', 'KNEADING');
       const pick = choices[Math.floor(Math.random() * choices.length)];
 
-      if (pick === 'GROOMING') {
+      if (pick === 'WALKING') {
+        this.startWalking();
+      } else if (pick === 'GROOMING') {
         this.setBehavior('GROOMING', 4.5);
       } else if (pick === 'CURIOUS') {
         this.setBehavior('CURIOUS', 2.8);
@@ -662,6 +684,11 @@ class CatGameState {
 
     this.notify();
     return true;
+  }
+
+  // Đi dạo chậm qua lại trên thảm (renderer lo việc di chuyển và dừng lại khi có tương tác)
+  startWalking() {
+    this.setBehavior('WALKING', WALK_CONFIG.MIN_SECONDS + Math.random() * (WALK_CONFIG.MAX_SECONDS - WALK_CONFIG.MIN_SECONDS));
   }
 
   isFull() {

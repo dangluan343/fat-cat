@@ -139,8 +139,8 @@ body {
 /* Top Left Profile & Vitals */
 .top-left-panel {
   position: absolute;
-  top: 20px;
-  left: 24px;
+  top: 12px;
+  left: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -262,6 +262,7 @@ body {
 
 /* Vitals Card */
 .vitals-card {
+  position: relative;
   width: 250px;
   background: var(--card-bg);
   backdrop-filter: blur(16px);
@@ -341,9 +342,7 @@ body {
 
 /* Daily Quests Parchment Note */
 .quests-card {
-  position: absolute;
-  top: 260px;
-  left: 24px;
+  position: relative;
   width: 252px;
   background: #fef9c3;
   color: #422006;
@@ -575,8 +574,8 @@ body {
 /* Top Right Navigation Buttons */
 .top-right-nav {
   position: absolute;
-  top: 20px;
-  right: 28px;
+  top: 12px;
+  right: 14px;
   display: flex;
   gap: 12px;
   z-index: 40;
@@ -616,8 +615,8 @@ body {
 /* Right Quick Actions Floating Menu */
 .right-actions-menu {
   position: absolute;
-  top: 96px;
-  right: 24px;
+  top: 88px;
+  right: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -660,10 +659,10 @@ body {
 /* Bottom Inventory Dock */
 .bottom-inventory-dock {
   position: absolute;
-  bottom: 20px;
-  left: 24px;
+  bottom: 12px;
+  left: 14px;
   width: calc(100% - 380px);
-  max-width: 900px;
+  max-width: 760px;
   background: var(--card-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -676,6 +675,7 @@ body {
 
 .dock-tabs {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -718,8 +718,8 @@ body {
 
 .inventory-slot {
   position: relative;
-  min-width: 94px;
-  height: 98px;
+  min-width: 82px;
+  height: 84px;
   background: rgba(15, 23, 42, 0.65);
   border: 1.5px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
@@ -787,10 +787,10 @@ body {
 /* Bottom Right "Hành động hiện tại" Card */
 .current-action-card {
   position: absolute;
-  bottom: 20px;
-  right: 24px;
+  bottom: 12px;
+  right: 14px;
   width: 290px;
-  height: 148px;
+  min-height: 148px;
   background: var(--card-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -805,6 +805,9 @@ body {
 }
 
 .action-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 13px;
   font-weight: 800;
   color: var(--text-muted);
@@ -1071,6 +1074,143 @@ body {
   font-size: 16px;
   color: #f8fafc;
   margin-bottom: 20px;
+}
+
+/* ===================================================================
+   THU GỌN CÁC BẢNG UI (nút –/+ trên từng bảng, nút "Thu gọn" và phím H cho tất cả)
+   =================================================================== */
+.panel-toggle {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.panel-toggle:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.quests-card .panel-toggle {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.panel-toggle-corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+.panel-toggle-menu {
+  align-self: flex-end;
+}
+
+.dock-toggle {
+  margin-left: auto;
+}
+
+.panel-mini {
+  display: none;
+}
+
+[data-collapsible].is-collapsed .panel-body {
+  display: none;
+}
+
+[data-collapsible].is-collapsed .panel-mini {
+  display: inline-flex;
+}
+
+.vitals-mini {
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  padding-right: 26px;
+}
+
+.vitals-card.is-collapsed {
+  padding: 10px 14px;
+}
+
+.quests-header > span:first-child,
+.quest-streak {
+  white-space: nowrap;
+}
+
+.quests-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quests-mini {
+  font-size: 11px;
+  color: #a16207;
+  margin-left: 4px;
+}
+
+.quests-card.is-collapsed .quests-header {
+  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.actions-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bottom-inventory-dock.is-collapsed .dock-tabs {
+  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.current-action-card.is-collapsed {
+  min-height: 0;
+}
+
+/* ===================================================================
+   KÍCH THƯỚC UI GỌN: các bảng nổi thu theo --ui-scale (zoom thu cả vùng bấm),
+   để che ít mèo và hình nền hơn. Ở mức nhỏ nhất (0.78) ô đồ ăn ~64px, nút ~47px, chữ ≥ 9.5px.
+   =================================================================== */
+:root {
+  --ui-scale: 0.85;
+}
+
+@media (max-height: 820px) {
+  :root {
+    --ui-scale: 0.78;
+  }
+}
+
+@media (min-height: 1000px) and (min-width: 1700px) {
+  :root {
+    --ui-scale: 0.9;
+  }
+}
+
+.top-left-panel,
+.top-right-nav,
+.right-actions-menu,
+.bottom-inventory-dock,
+.current-action-card,
+.office-network-bar {
+  zoom: var(--ui-scale);
 }
 
 /* Kéo thả đồ ăn */

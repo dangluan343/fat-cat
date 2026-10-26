@@ -49,7 +49,11 @@
         </div>
 
         <!-- Vitals Bars Card -->
-        <div class="vitals-card ui-interactive">
+        <div class="vitals-card ui-interactive" data-collapsible="vitals">
+          <button class="panel-toggle panel-toggle-corner" data-toggle-panel="vitals" title="Thu gọn">–</button>
+          <!-- Khi thu gọn: một dòng tóm tắt 4 chỉ số -->
+          <div id="vitals-mini" class="vitals-mini panel-mini"></div>
+          <div class="panel-body vitals-body">
           <!-- Đói -->
           <div class="vital-row">
             <div class="vital-icon">🍴</div>
@@ -89,21 +93,27 @@
             </div>
             <div id="vital-energy-val" class="vital-val">60/100</div>
           </div>
+          </div>
         </div>
 
-      </div>
-
-      <!-- MIDDLE LEFT: Daily Quests Parchment Note -->
-      <div id="quests-card" class="quests-card ui-interactive">
-        <div class="quests-header">
-          <span>Nhiệm vụ hôm nay</span>
-          <span id="quest-streak" class="quest-streak">🔥 0</span>
+        <!-- Daily Quests Parchment Note (nằm chung cột trái để không bị bảng chỉ số che) -->
+        <div id="quests-card" class="quests-card ui-interactive" data-collapsible="quests">
+          <div class="quests-header">
+            <span>Nhiệm vụ hôm nay <span id="quests-mini" class="panel-mini quests-mini"></span></span>
+            <span class="quests-header-right">
+              <span id="quest-streak" class="quest-streak">🔥 0</span>
+              <button class="panel-toggle" data-toggle-panel="quests" title="Thu gọn">–</button>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div id="quest-reset" class="quest-reset">Làm mới sau --</div>
+            <ul id="daily-quests-list" class="quests-list">
+              <!-- Populated by JS -->
+            </ul>
+            <div id="quest-chest" class="quest-chest"></div>
+          </div>
         </div>
-        <div id="quest-reset" class="quest-reset">Làm mới sau --</div>
-        <ul id="daily-quests-list" class="quests-list">
-          <!-- Populated by JS -->
-        </ul>
-        <div id="quest-chest" class="quest-chest"></div>
+
       </div>
 
       <!-- TOP RIGHT: Navigation Buttons -->
@@ -124,10 +134,16 @@
           <span class="icon">⚙️</span>
           <span>Cài đặt</span>
         </button>
+        <button id="btn-nav-collapse" class="nav-btn" title="Thu gọn / mở tất cả bảng (phím H)">
+          <span class="icon" id="nav-collapse-icon">🙈</span>
+          <span id="nav-collapse-label">Thu gọn</span>
+        </button>
       </div>
 
       <!-- RIGHT SIDEBAR: Floating Quick Actions -->
-      <div class="right-actions-menu ui-interactive">
+      <div class="right-actions-menu ui-interactive" data-collapsible="actions">
+        <button class="panel-toggle panel-toggle-menu" data-toggle-panel="actions" title="Thu gọn">–</button>
+        <div class="panel-body actions-body">
         <button id="btn-quick-pet" class="action-pill-btn" title="Vuốt ve xoa đầu">
           <span class="action-icon">💖</span>
           <span>Vuốt ve</span>
@@ -152,10 +168,11 @@
           <span class="action-icon">😌</span>
           <span>Nháy mắt</span>
         </button>
+        </div>
       </div>
 
       <!-- BOTTOM LEFT: Inventory & Item Drawer -->
-      <div class="bottom-inventory-dock ui-interactive">
+      <div class="bottom-inventory-dock ui-interactive" data-collapsible="dock">
         <!-- Category Tabs -->
         <div class="dock-tabs">
           <div class="tab-pill active" data-tab="food">🥣 Đồ ăn</div>
@@ -163,18 +180,22 @@
           <div class="tab-pill" data-tab="outfit">👕 Trang phục</div>
           <div class="tab-pill" data-tab="decor">🛋️ Đồ dùng</div>
           <div class="tab-pill" data-tab="special">⭐ Đặc biệt</div>
+          <button class="panel-toggle dock-toggle" data-toggle-panel="dock" title="Thu gọn">–</button>
         </div>
 
         <!-- Inventory Slots Row -->
-        <div id="inventory-slots-row" class="inventory-slots-row">
+        <div id="inventory-slots-row" class="inventory-slots-row panel-body">
           <!-- Rendered dynamically by app.js -->
         </div>
       </div>
 
       <!-- BOTTOM RIGHT: "Hành động hiện tại" Card -->
-      <div class="current-action-card ui-interactive">
-        <div class="action-card-header">Hành động hiện tại</div>
-        <div class="action-card-body">
+      <div class="current-action-card ui-interactive" data-collapsible="action">
+        <div class="action-card-header">
+          <span>Hành động hiện tại</span>
+          <button class="panel-toggle" data-toggle-panel="action" title="Thu gọn">–</button>
+        </div>
+        <div class="action-card-body panel-body">
           <div class="mini-cat-avatar">🐱</div>
           <div class="action-card-info">
             <div id="action-card-title" class="action-title">Đang được vuốt ve</div>

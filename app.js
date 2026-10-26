@@ -5,10 +5,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Initialize Renderer & Engine
   const renderer = new CatRenderer('cat-canvas');
-  // Các khối UI che sàn phòng: renderer chọn chỗ trên thảm để mèo không bị chúng che
-  renderer.getBlockedRects = () =>
-    [...document.querySelectorAll('.bottom-inventory-dock, .current-action-card, .right-actions-menu, .top-left-panel, .quests-card')]
-      .map(el => el.getBoundingClientRect());
   const state = window.gameState;
   const audio = window.catAudio;
 
@@ -195,6 +191,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Hộp quà ngày: tiến độ ●●○ và nút mở khi đã nhận đủ
     const claimedCount = quests.list.filter(q => q.claimed).length;
     const dots = quests.list.map(q => (q.claimed ? '●' : '○')).join('');
+    // Tóm tắt khi bảng thu gọn; "!" nếu có nhiệm vụ đang chờ nhận
+    const readyCount = quests.list.filter(q => q.done && !q.claimed).length;
+    document.getElementById('quests-mini').textContent =
+      `${claimedCount}/${quests.list.length}${readyCount || state.isDailyChestReady() ? ' 🎁' : ''}`;
     const chest = document.getElementById('quest-chest');
     if (quests.chestClaimed) {
       chest.innerHTML = '<span class="chest-label">🎁 Đã mở hộp quà hôm nay ✓</span>';
@@ -271,6 +271,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('vital-energy-fill').style.width = `${v.energy}%`;
     document.getElementById('vital-energy-val').textContent = `${Math.round(v.energy)}/100`;
+    // Dòng tóm tắt khi bảng chỉ số thu gọn
+    document.getElementById('vitals-mini').textContent =
+      `🍴${Math.round(v.hunger)} 😊${Math.round(v.happiness)} 💖${Math.round(v.health)} 🌙${Math.round(v.energy)}`;
 
     // 3. Daily Quests
     renderQuests(data);
@@ -353,6 +356,9 @@ document.addEventListener('DOMContentLoaded', () => {
         break;
       case 'HISS':
         bubbleText.textContent = 'Khèèè! 😾';
+        break;
+      case 'WALKING':
+        bubbleText.textContent = 'Đi dạo một vòng nè ~ 🐾';
         break;
       default:
         if (v.hunger < 35) {
@@ -585,6 +591,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  // --- THU GỌN CÁC BẢNG UI ---
+  // Mỗi bảng có data-collapsible và nút data-toggle-panel; trạng thái lưu theo trình duyệt
+  const UI_COLLAPSE_KEY = 'meow_ui_collapsed';
+  let collapsedPanels = null;
+  try {
+    collapsedPanels = JSON.parse(localStorage.getItem(UI_COLLAPSE_KEY));
+  } catch (e) {
+    collapsedPanels = null;
+  }
+  // Chưa chọn gì: màn thấp thì thu bảng chỉ số về một dòng để bảng nhiệm vụ không chạm túi đồ
+  if (!collapsedPanels) collapsedPanels = window.innerHeight < 900 ? { vitals: true } : {};
+
+  const applyCollapsed = () => {
+    const all = [...document.querySelectorAll('[data-collapsible]')];
+    all.forEach(el => {
+      const id = el.dataset.collapsible;
+      const collapsed = !!collapsedPanels[id];
+      el.classList.toggle('is-collapsed', collapsed);
+      const btn = el.querySelector(`[data-toggle-panel="${id}"]`);
+      if (btn) {
+        btn.textContent = collapsed ? '+' : '–';
+        btn.title = collapsed ? 'Mở rộng' : 'Thu gọn';
+        btn.setAttribute('aria-expanded', String(!collapsed));
+      }
+    });
+    const allCollapsed = all.every(el => collapsedPanels[el.dataset.collapsible]);
+    document.getElementById('nav-collapse-icon').textContent = allCollapsed ? '👀' : '🙈';
+    document.getElementById('nav-collapse-label').textContent = allCollapsed ? 'Mở rộng' : 'Thu gọn';
+  };
+
+  const setCollapsed = (changes) => {
+    Object.assign(collapsedPanels, changes);
+    try {
+      localStorage.setItem(UI_COLLAPSE_KEY, JSON.stringify(collapsedPanels));
+    } catch (e) {
+      // Không lưu được (chế độ riêng tư...) thì chỉ áp dụng cho phiên này
+    }
+    applyCollapsed();
+  };
+
+  // Còn bảng nào đang mở thì thu gọn hết, ngược lại mở hết
+  const toggleAllPanels = () => {
+    const ids = [...document.querySelectorAll('[data-collapsible]')].map(el => el.dataset.collapsible);
+    const collapse = ids.some(id => !collapsedPanels[id]);
+    setCollapsed(Object.fromEntries(ids.map(id => [id, collapse])));
+  };
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-toggle-panel]');
+    if (!btn) return;
+    const id = btn.dataset.togglePanel;
+    setCollapsed({ [id]: !collapsedPanels[id] });
+  });
+  document.getElementById('btn-nav-collapse').addEventListener('click', toggleAllPanels);
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'h' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    toggleAllPanels();
+  });
+  applyCollapsed();
+
   // --- DOCK TAB SWITCHING ---
   document.querySelectorAll('.tab-pill').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -592,6 +659,8 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       activeTab = btn.getAttribute('data-tab');
       renderInventorySlots();
+      // Bấm một tab khi túi đồ đang thu gọn thì mở ra luôn
+      if (collapsedPanels.dock) setCollapsed({ dock: false });
     });
   });
 

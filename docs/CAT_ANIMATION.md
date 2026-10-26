@@ -135,6 +135,14 @@ Cột "Trạng thái" là tên `behaviorState`. ✅ = đã làm trong lần này
 
 Chi tiết vẽ thêm: cờ `shiver`, `eyeBags`, `sickTint`, `tear`, `bellyPuff`, `noseWrinkle` trong `CAT_EXPRESSIONS`; miệng `wobble`, `licklips`, `hiss`; đuôi xù có viền lông tua tủa và chóp không phình quá to; `HOSTILE_STATES` gom cáu + rít. Ngưỡng ở `VITAL_MOODS` (game-state.js).
 
+### 4.2c Đi dạo (làm 2026-10-26)
+
+| Trạng thái | Biểu cảm | Tư thế / chuyển động | Kích hoạt | Trạng thái |
+|---|---|---|---|---|
+| `WALKING` | Mắt nhìn về phía trước, đuôi dựng | Đứng dậy bốn chân (`rig.stand`, chân mọc dần), bước theo cặp chéo, đầu nhấp nhô, đi chậm qua lại giữa hai nửa thảm, quay mặt theo hướng đi | AI chọn ngẫu nhiên (trọng số gấp đôi); bị tương tác chen ngang thì dừng tại chỗ, xong việc đi tiếp; đang kéo đồ ăn tới thì đứng chờ | ✅ |
+
+Vị trí mặc định của mèo là **chính giữa tấm thảm**; đi dạo xong thì nằm lại chỗ dừng (resize cửa sổ thì về giữa thảm). Hướng mặt được giữ sau khi dừng; mắt bám con trỏ đã tính cả hướng mặt.
+
 ### 4.3 Chi tiết model được sửa
 
 | Bộ phận | Sửa | Trạng thái |
@@ -194,7 +202,6 @@ Nhóm P1 (ốm, kiệt sức, đói lả, no căng, rít) đã làm, xem mục 4
 | Nằm nghiêng duỗi dài | Ngủ say, no căng, nắng ấm | P2 | L |
 | Cuộn tròn kiểu "bánh donut" | Ngủ khi lạnh/đêm | P3 | L |
 | Lưng cong chữ U, xù lông | Sợ, rít | P2 | L |
-| Đứng bốn chân / đi lại | Mèo đi quanh phòng, ra ổ mèo, ra cửa sổ | P3 | L (cần thêm hệ di chuyển) |
 | Sploot (nằm sấp duỗi chân sau) | Thư giãn, dễ thương | P3 | L |
 
 **Khác**

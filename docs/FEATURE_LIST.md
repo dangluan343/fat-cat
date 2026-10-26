@@ -24,14 +24,14 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | Mã | Module | Số feature | Done | Partial | Branch | Planned |
 |---|---|---|---|---|---|---|
 | CORE | Lõi game (vòng lặp, lưu/nạp, state) | 5 | 5 | 0 | 0 | 0 |
-| PET | Thú cưng (chỉ số, hành vi, AI) | 17 | 17 | 0 | 0 | 0 |
+| PET | Thú cưng (chỉ số, hành vi, AI) | 18 | 18 | 0 | 0 | 0 |
 | ACT | Tương tác người chơi | 11 | 10 | 1 | 0 | 0 |
 | ECO | Kinh tế & tiến trình | 12 | 11 | 1 | 0 | 0 |
 | OFF | Tiến trình offline & quà | 4 | 0 | 0 | 4 | 0 |
 | CUS | Tuỳ biến (lông, phụ kiện, phòng) | 5 | 5 | 0 | 0 | 0 |
 | REN | Đồ hoạ Canvas 2D | 13 | 12 | 1 | 0 | 0 |
 | AUD | Âm thanh | 5 | 5 | 0 | 0 | 0 |
-| UI | Giao diện người dùng | 8 | 8 | 0 | 0 | 0 |
+| UI | Giao diện người dùng | 10 | 10 | 0 | 0 | 0 |
 | NET | Nhiều người trong văn phòng | 9 | 8 | 1 | 0 | 0 |
 | NFR | Phi chức năng | 6 | 2 | 4 | 0 | 0 |
 | BKL | Backlog đề xuất | 10 | 2 | 0 | 0 | 8 |
@@ -54,7 +54,7 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 |---|---|---|---|---|---|---|
 | PET-01 | Bốn chỉ số sống | Đói (hunger), Vui vẻ, Sức khoẻ, Năng lượng, thang 0–100 | M | ✅ Done | FN-GS-11 | |
 | PET-02 | Suy giảm chỉ số theo thời gian | Hunger −0.1/giây; đói <25 làm tụt vui và sức khoẻ (có sàn); sức khoẻ tự hồi khi no | M | ✅ Done | FN-GS-11 | Mèo không chết (hình phạt nhẹ có chủ đích) |
-| PET-03 | Máy trạng thái hành vi | 24 trạng thái: IDLE, PETTING, SLEEPING, YAWNING, LICKING_PAW, ROLLING, BEGGING, EATING, PLAYING, ZOOMIES, SULKING, SLOW_BLINK, CURIOUS, SURPRISED, ANNOYED, KNEADING, BLEP, GREETING, GROOMING, SICK, EXHAUSTED, STARVING, FULL, HISS | M | ✅ Done | FN-GS-13, FN-GS-14 | Danh sách và ý nghĩa: [CAT_ANIMATION.md](CAT_ANIMATION.md) mục 4 |
+| PET-03 | Máy trạng thái hành vi | 25 trạng thái: IDLE, PETTING, SLEEPING, YAWNING, LICKING_PAW, ROLLING, BEGGING, EATING, PLAYING, ZOOMIES, SULKING, SLOW_BLINK, CURIOUS, SURPRISED, ANNOYED, KNEADING, BLEP, GREETING, GROOMING, SICK, EXHAUSTED, STARVING, FULL, HISS, WALKING | M | ✅ Done | FN-GS-13, FN-GS-14 | Danh sách và ý nghĩa: [CAT_ANIMATION.md](CAT_ANIMATION.md) mục 4 |
 | PET-04 | AI hành vi tự trị | Mỗi 8–16 giây tự chọn: xin ăn khi đói, ngủ khi mệt, Zoomies khi sung, hoặc hành động ngẫu nhiên | S | ✅ Done | FN-GS-14 | |
 | PET-05 | Ngủ và hồi năng lượng | Ngủ hồi 1.5 năng lượng/giây; đầy thì tự thức và tính nhiệm vụ ngủ | S | ✅ Done | FN-GS-11, FN-GS-19 | |
 | PET-06 | Banner "Hành động hiện tại" | Mỗi hành vi có tiêu đề + mô tả hiển thị trong thẻ góc dưới phải | S | ✅ Done | FN-GS-12, FN-GS-13 | |
@@ -69,6 +69,7 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | PET-15 | Đói lả (`STARVING`) | Đói < 10 thay cho xin ăn: nằm bẹp, mắt to ướt có nước mắt, kêu yếu từng hồi, đuôi sát sàn | S | ✅ Done | FN-GS-14 | `VITAL_MOODS.STARVING_HUNGER` |
 | PET-16 | No căng (`FULL`) | Ăn tới đói ≥ 95 thì ăn xong chuyển sang no căng (mắt cười, liếm mép, bụng phình); đã no mà vẫn thả đồ ăn thì mèo từ chối, không trừ món | S | ✅ Done | FN-GS-16, FN-GS-29, FN-APP-34 | `VITAL_MOODS.FULL_HUNGER`; dùng `nextBehavior` để nối trạng thái |
 | PET-17 | Rít (`HISS`) | Vẫn bị vuốt 6 lần trong lúc cáu: há miệng lộ 4 nanh, nhăn mũi, đồng tử giãn, tai ép sát, đuôi xù tua tủa, tiếng rít; −5 vui, 2.5 giây không nhận vuốt | S | ✅ Done | FN-GS-15, FN-AUD-17 | `VITAL_MOODS.HISS_AFTER_PETS` |
+| PET-18 | Đi dạo trên thảm (`WALKING`) | Mèo đứng dậy bốn chân, đi chậm qua lại giữa hai nửa thảm, quay mặt theo hướng đi; có tương tác (vuốt, cho ăn, chơi, cáu...) thì dừng ngay chỗ đó, xong việc thì đi tiếp; đang kéo đồ ăn tới thì đứng lại chờ; hết lượt thì nằm lại chỗ dừng | S | ✅ Done | FN-GS-39, FN-REN-07, FN-REN-42 | Không tự đi tiếp sau ngủ, mệt, ốm, đói, dỗi, xin ăn (`WALK_CONFIG`) |
 
 ## 3. ACT — Tương tác người chơi
 
@@ -130,7 +131,7 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | REN-02 | Hoạt ảnh theo trạng thái | Thở, chớp mắt, giật tai, nhồi bột, nhai, lắc mông, Zoomies chạy ngang | M | ✅ Done | FN-REN-07 | |
 | REN-03 | Mắt mèo | 5 kiểu: mở (mống mắt phủ kín, đồng tử khe/tròn, mí trên theo rig, bám con trỏ), cười `^ ^`, nhắm `︶`, nhắm chặt `> <`, mắt to long lanh | S | ✅ Done | FN-REN-30, FN-REN-31, FN-REN-14 | |
 | REN-04 | Hệ hạt hiệu ứng | Tim, sao, vụn thức ăn, bụi, Z ngủ | S | ✅ Done | FN-REN-05, FN-REN-17 | Hạt là emoji |
-| REN-05 | Mèo nằm trên thảm, co giãn theo màn hình | Tính vị trí tấm thảm từ ảnh nền (`ROOM_BG`, nền `cover` căn đáy), thử nhiều điểm trên thảm và chọn điểm ít bị dock/thẻ hành động/menu che nhất; `scale` theo tỉ lệ ảnh nền; đĩa ăn, bóng len đặt cạnh mèo; Zoomies chạy trong phạm vi thảm | S | ✅ Done | FN-REN-02, FN-REN-41, FN-APP-01 | Màn nhỏ (≤ 1366×768) dock che gần hết thảm nên mèo nằm mép phải thảm |
+| REN-05 | Mèo nằm giữa thảm, co giãn theo màn hình | Vị trí mặc định là chính giữa tấm thảm của ảnh nền (`ROOM_BG`, nền `cover` căn đáy); `scale` theo tỉ lệ ảnh nền; đĩa ăn đặt cạnh chỗ mèo đang nằm; đi dạo và Zoomies trong phạm vi thảm | S | ✅ Done | FN-REN-02, FN-REN-41 | Màn thấp thì túi đồ che một phần mèo: thu gọn túi đồ (UI-09) |
 | REN-06 | Bong bóng thoại bám theo mèo | Chữ đổi theo trạng thái và chỉ số | C | ✅ Done | FN-REN-07, FN-APP-07 | |
 | REN-07 | Hiển thị vật phẩm đặc thù | Chuột cót, cá bông chưa có hình | S | 🟡 Partial | FN-REN-16 | Trùng ACT-07 |
 | REN-08 | Mặt chi tiết | Mũi bo tròn, nhân trung, đệm râu, 10 kiểu miệng, râu đổi hướng theo cảm xúc (sáng màu trên lông tối), giọt mồ hôi khi dỗi | S | ✅ Done | FN-REN-22, FN-REN-32, FN-REN-33 | |
@@ -161,7 +162,9 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | UI-05 | Điều hướng trên phải | Phòng, Trang phục, Bộ sưu tập, Cài đặt | S | ✅ Done | FN-APP-16..19 | |
 | UI-06 | Hệ modal | Cửa hàng, Tủ đồ, Sưu tập, Cài đặt, Lên cấp, Quà | M | ✅ Done | FN-APP-20..24 | |
 | UI-07 | Toast | Thông báo ngắn trên đầu, tự tắt sau 2.8 giây | S | ✅ Done | FN-APP-03 | |
-| UI-08 | Bảng nhiệm vụ | Chuỗi 🔥 + vé ❄️ (di chuột xem chi tiết), đồng hồ làm mới, 3 nhiệm vụ có thanh tiến độ và chip thưởng, nút Nhận nhún nhẹ khi xong, nút đổi 🔄, chân bảng là hộp quà ngày ●●○ | C | ✅ Done | FN-APP-35 | |
+| UI-08 | Bảng nhiệm vụ | Nằm trong cột trái ngay dưới bảng chỉ số (trước đây đặt cố định `top: 260px` nên bị che); chuỗi 🔥 + vé ❄️, đồng hồ làm mới, 3 nhiệm vụ có thanh tiến độ và chip thưởng, nút Nhận, nút đổi 🔄, hộp quà ngày ●●○ | C | ✅ Done | FN-APP-35 | |
+| UI-09 | Thu gọn các bảng UI | Nút –/+ trên bảng chỉ số, nhiệm vụ, menu hành động, túi đồ, thẻ hành động; nút "Thu gọn" trên thanh điều hướng và phím H để thu gọn / mở tất cả; lưu theo trình duyệt; khi thu gọn bảng chỉ số hiện một dòng tóm tắt, bảng nhiệm vụ hiện "x/3 🎁"; bấm tab túi đồ khi đang thu gọn thì mở ra. Lần đầu (chưa chọn) trên màn cao < 900px tự thu bảng chỉ số | S | ✅ Done | FN-APP-38 | Khoá localStorage `meow_ui_collapsed` |
+| UI-10 | Giao diện gọn | Các bảng nổi thu theo biến `--ui-scale` (CSS `zoom`, thu cả vùng bấm): 0.85 mặc định, 0.78 khi màn cao ≤ 820px, 0.9 trên màn ≥ 1700×1000; lề sát mép hơn (12–14px), ô túi đồ nhỏ hơn. Ở mức 0.78 ô đồ ăn ~64px, nút ~47px | S | ✅ Done | — | Chỉ CSS (style.css, mục "KÍCH THƯỚC UI GỌN") |
 
 ## 10. NET — Nhiều người trong văn phòng
 

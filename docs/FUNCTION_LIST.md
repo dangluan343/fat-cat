@@ -11,7 +11,7 @@ Danh sách chức năng kỹ thuật (hàm / phương thức / bộ xử lý s�
 
 ## 1. GS — `game-state.js` (lớp `CatGameState`, toàn cục `window.gameState`)
 
-Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET_OVERLOAD` (ngưỡng vuốt quá lâu), `SLOW_BLINK_COOLDOWN_MS`, `UNINTERRUPTIBLE_STATES` (trạng thái AI không ngắt), `VITAL_MOODS` (ngưỡng ốm/kiệt sức/đói lả/no căng/rít), `GIFT_FOODS` (id → tên đồ ăn dùng cho quà), `QUEST_TIERS` (thưởng theo mức), `QUEST_POOL` (kho 10 loại nhiệm vụ), `QUESTS_PER_DAY`, `QUEST_REROLLS_PER_DAY`, `DAILY_CHEST`, `STREAK_CONFIG`.
+Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET_OVERLOAD` (ngưỡng vuốt quá lâu), `SLOW_BLINK_COOLDOWN_MS`, `UNINTERRUPTIBLE_STATES` (trạng thái AI không ngắt), `VITAL_MOODS` (ngưỡng ốm/kiệt sức/đói lả/no căng/rít), `WALK_CONFIG` (thời lượng đi dạo, trạng thái không tự đi tiếp), `GIFT_FOODS` (id → tên đồ ăn dùng cho quà), `QUEST_TIERS` (thưởng theo mức), `QUEST_POOL` (kho 10 loại nhiệm vụ), `QUESTS_PER_DAY`, `QUEST_REROLLS_PER_DAY`, `DAILY_CHEST`, `STREAK_CONFIG`.
 
 | ID | Hàm | Mô tả | Vào → Ra | Phụ thuộc / Hiệu ứng phụ | Feature |
 |---|---|---|---|---|---|
@@ -27,8 +27,8 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 | FN-GS-10 | `claimGifts()` | Nhận toàn bộ quà chờ | — → `{count, coins}` hoặc `null` | Cộng kho, `addCoins`, `addExp(5 × số quà)`, xoá `pendingGifts` | OFF-04 |
 | FN-GS-11 | `updateVitals(deltaSeconds)` | Suy giảm/hồi chỉ số theo thời gian online; gọi AI | `deltaSeconds` → — | Sửa `vitals`, `stats.sleepSeconds`; có thể gọi `completeQuestProgress('sleep_cat')`, `setAction`, `setBehavior`; gọi `tickAutonomousAI` | PET-01, PET-02, PET-05, CORE-01 |
 | FN-GS-12 | `setAction(title, desc, progress=100)` | Đặt nội dung thẻ "Hành động hiện tại" | → — | Ghi `data.currentAction`; `notify()` | PET-06 |
-| FN-GS-13 | `setBehavior(state, duration=4)` | Đổi trạng thái hành vi (24 trạng thái), đặt đồng hồ, xoá `nextBehavior`, cập nhật banner | `state`, giây → — | Gọi `setAction`; `ZOOMIES` thì `unlockAchievement('zoomies_champ')`. Hình dạng từng trạng thái nằm ở `CAT_EXPRESSIONS` (cat-renderer.js) | PET-03, PET-06, ACT-09 |
-| FN-GS-14 | `tickAutonomousAI(delta)` | Hết hạn trạng thái tạm thời (chuyển sang `nextBehavior` nếu có, không thì IDLE); mỗi 8–16 giây chọn hành động: sức khoẻ < 30 → ốm (60%), đói < 10 → đói lả, đói < 35 → xin ăn, năng lượng < 25 → ngủ (năng lượng < 15 thì 50% gật gù trước), sung → Zoomies, vui < 30 → dỗi, còn lại ngẫu nhiên | `delta` → — | Không ngắt `UNINTERRUPTIBLE_STATES`; gọi `setBehavior`, `catAudio`; Zoomies: giảm năng lượng, tăng vui, `addCoins(5)` | PET-03, PET-04, PET-13..15 |
+| FN-GS-13 | `setBehavior(state, duration=4)` | Đổi trạng thái hành vi (25 trạng thái), đặt đồng hồ, xoá `nextBehavior`, cập nhật banner; đang đi dạo mà bị chen ngang thì bật `resumeWalk` (trừ khi chuyển sang nằm/ngủ/mệt/ốm/đói/dỗi/xin ăn) | `state`, giây → — | Gọi `setAction`; `ZOOMIES` thì `unlockAchievement('zoomies_champ')`. Hình dạng từng trạng thái nằm ở `CAT_EXPRESSIONS` (cat-renderer.js) | PET-03, PET-06, ACT-09, PET-18 |
+| FN-GS-14 | `tickAutonomousAI(delta)` | Hết hạn trạng thái tạm thời (chuyển sang `nextBehavior` nếu có, không thì đi tiếp nếu `resumeWalk`, không thì IDLE); mỗi 8–16 giây chọn hành động: sức khoẻ < 30 → ốm (60%), đói < 10 → đói lả, đói < 35 → xin ăn, năng lượng < 25 → ngủ (năng lượng < 15 thì 50% gật gù trước), sung → Zoomies, vui < 30 → dỗi, còn lại ngẫu nhiên (đi dạo có trọng số gấp đôi, ngáp, liếm chân, rửa mặt, lăn, tò mò, thè lưỡi; vui > 65 thêm nháy mắt chậm, nhồi bột) | `delta` → — | Không ngắt `UNINTERRUPTIBLE_STATES`; gọi `setBehavior`, `catAudio`; Zoomies: giảm năng lượng, tăng vui, `addCoins(5)` | PET-03, PET-04, PET-13..15, PET-18 |
 | FN-GS-15 | `pet(isClick=false)` | Xử lý một lần vuốt, có phản ứng theo trạng thái | `isClick` → `'ok'` / `'annoyed'` / `'hiss'` / `'dozing'` / `'startled'` | Đang rít: không nhận. Đang cáu: đếm `annoyedPets`, đủ `HISS_AFTER_PETS` thì `HISS`, −5 vui, `catAudio.hiss`. Đang ngủ: rê chuột thì +0.4 vui và ngủ tiếp, bấm thì `SURPRISED`. Vuốt ≥ `PET_OVERLOAD.MAX_PETS` lần trong cửa sổ → `ANNOYED`, −3 vui. Bình thường: `+1.2` vui, `+0.3` sức khoẻ, `addExp(2)`, 15% `addCoins(1)`, nhiệm vụ `pet_cat`, mở `first_pet`, `PETTING` | ACT-01, PET-09, PET-10, PET-17 |
 | FN-GS-16 | `feed(foodId)` | Cho ăn một món | `foodId` → `true` / `false` / `'full'` | Hết hàng hoặc id lạ → `false`. Đã no (`isFull`) → `FULL` 3 giây, `'full'`, không trừ kho. Bình thường: trừ kho, cộng chỉ số, `addExp`, ghi `foodsDiscovered`, mở `gourmet_cat` khi ≥4 món, nhiệm vụ `feed_cat`, âm thanh nhai/uống, `EATING`; ăn tới mức no thì nối `FULL` sau khi ăn | ACT-02, PET-16 |
 | FN-GS-17 | `playWithToy(toyId)` | Bắt đầu chơi | `toyId` → `boolean` | Năng lượng < 15 → `EXHAUSTED`, trả `false`, không thưởng. Bình thường: đặt `activeToy`, `+20` vui, `−10` năng lượng (sàn 10), `addExp(18)`, `addCoins(6)`, nhiệm vụ `play_cat`, ghi `toysUsed`, `setBehavior('PLAYING', 10)` | ACT-03, PET-14 |
@@ -53,6 +53,7 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 | FN-GS-36 | `isDailyChestReady()`, `claimDailyChest()` | Kiểm tra / mở hộp quà ngày khi đã nhận đủ: xu ngẫu nhiên, EXP, có thể kèm món ăn hoặc trang phục; mèo `KNEADING` | → `boolean` / `{ coins, rewards }` / `null` | | ECO-10 |
 | FN-GS-37 | `recordStreakDay()` | Ghi ngày có chăm mèo: liên tiếp thì +1, lỡ ngày thì dùng vé đóng băng nếu đủ, không thì về 1; cập nhật kỷ lục, tặng vé mỗi 7 ngày, thưởng mốc | → `{ count, usedFreezes, freezeEarned, milestone }` / `null` (đã ghi hôm nay) | | ECO-11 |
 | FN-GS-38 | `getStreakView()` | Chuỗi để hiển thị: còn sống (hôm nay đã giữ, hoặc số ngày lỡ ≤ số vé) hay đã đứt (hiện 0) | → `{ count, best, freezes, activeToday }` | | ECO-11, UI-08 |
+| FN-GS-39 | `startWalking()` | Vào trạng thái `WALKING` 8–16 giây (renderer lo việc di chuyển) | — | | PET-18 |
 
 ---
 
@@ -60,7 +61,7 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 
 | ID | Hàm / Bộ xử lý | Mô tả | Vào → Ra | Phụ thuộc / Hiệu ứng phụ | Feature |
 |---|---|---|---|---|---|
-| FN-APP-01 | Khởi tạo (callback `DOMContentLoaded`) | Tạo `CatRenderer` và gán `renderer.getBlockedRects` (khung dock, thẻ hành động, menu phải, bảng trái), gắn mọi handler, vẽ HUD đầu, chạy `resumeFromAway`, bắt đầu vòng lặp | — | Toàn bộ UI | CORE-01, REN-05 |
+| FN-APP-01 | Khởi tạo (callback `DOMContentLoaded`) | Tạo `CatRenderer`, gắn mọi handler, áp dụng trạng thái thu gọn, vẽ HUD đầu, chạy `resumeFromAway`, bắt đầu vòng lặp | — | Toàn bộ UI | CORE-01 |
 | FN-APP-02 | `unlockAudio()` | Khởi tạo `AudioContext` ở click/phím đầu tiên rồi tự gỡ listener | — | `audio.init()` | AUD-05 |
 | FN-APP-03 | `window.showToast(msg)` | Hiện toast HTML, tự tắt sau 2.8 giây | `msg` (HTML) → — | Chèn vào `#toast-container` (dùng `innerHTML`) | UI-07 |
 | FN-APP-04 | `window.showLevelUpModal(level, bonus)` | Mở hộp thoại lên cấp (qua hàng đợi chúc mừng, hoãn một nhịp để phần thưởng gây lên cấp hiện trước) và bắn 20 hạt | → — | `#level-up-modal`, `renderer.spawnParticle` | ECO-02, UI-06, ECO-12 |
@@ -97,12 +98,13 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 | FN-APP-35 | `renderQuests(data)` + bộ xử lý bấm trên `#quests-card` | Dựng bảng nhiệm vụ (chuỗi, đồng hồ, nhiệm vụ, hộp quà), chỉ dựng lại khi dữ liệu đổi; bấm Nhận / Đổi / Mở hộp qua `data-action` | — | `claimQuest`, `rerollQuest`, `claimDailyChest`, `flyCoins`, `showRewardModal`, broadcast `quest` | ECO-05, ECO-09..11, UI-08 |
 | FN-APP-36 | `showRewardModal({title, subtitle, items})`, `flyCoins(fromEl, count)`, `formatCountdown(ms)` | Hộp thoại phần thưởng chung (hộp quà ngày, mốc chuỗi); xu bay từ nút về ví; định dạng "X giờ Y phút" | → — | `#reward-modal`, `.flying-coin` | ECO-10, ECO-11 |
 | FN-APP-37 | `showCelebration(id, setup)`, `checkNewDay()` | Mở hộp thoại chúc mừng hoặc xếp hàng nếu đang có cái khác mở; kiểm tra sang ngày mới (mỗi 15 giây, khi quay lại tab) và báo có nhiệm vụ mới | → — | `CELEBRATION_MODALS`, `celebrationQueue` | ECO-12, ECO-05 |
+| FN-APP-38 | Thu gọn bảng UI: `applyCollapsed()`, `setCollapsed(changes)`, `toggleAllPanels()` + bộ xử lý `[data-toggle-panel]`, nút `#btn-nav-collapse`, phím H | Đọc/lưu trạng thái thu gọn từng bảng (`data-collapsible`), đổi nút –/+ và nhãn "Thu gọn"/"Mở rộng"; mặc định màn thấp thu bảng chỉ số; bấm tab túi đồ thì mở túi đồ | — | localStorage `meow_ui_collapsed` | UI-09 |
 
 ---
 
 ## 3. REN — `cat-renderer.js` (lớp `CatRenderer`)
 
-Hằng số ngoài lớp: `HOSTILE_STATES` (cáu, rít: không nhận vuốt, không rù rù, không chờ đồ ăn), `CAT_HEAD` (tâm đầu), `ROOM_BG` (kích thước ảnh nền và vị trí tấm thảm trong ảnh), `CAT_BOUNDS` (khung bao mèo), `RIG_DEFAULTS` (tham số rig mặc định), `CAT_EXPRESSIONS` (kiểu mắt/miệng/chân/đuôi + đích rig cho từng trạng thái), `STATE_MARKERS` (ký hiệu cảm xúc). Giải thích: [CAT_ANIMATION.md](CAT_ANIMATION.md).
+Hằng số ngoài lớp: `STAND_LIFT` (đứng dậy nâng thân), `WALK_SPEED` (tốc độ đi dạo), `HOSTILE_STATES` (cáu, rít: không nhận vuốt, không rù rù, không chờ đồ ăn), `CAT_HEAD` (tâm đầu), `ROOM_BG` (kích thước ảnh nền và vị trí tấm thảm trong ảnh), `RIG_DEFAULTS` (tham số rig mặc định), `CAT_EXPRESSIONS` (kiểu mắt/miệng/chân/đuôi + đích rig cho từng trạng thái), `STATE_MARKERS` (ký hiệu cảm xúc). Giải thích: [CAT_ANIMATION.md](CAT_ANIMATION.md).
 
 | ID | Hàm | Mô tả | Vào → Ra | Phụ thuộc / Hiệu ứng phụ | Feature |
 |---|---|---|---|---|---|
@@ -112,7 +114,7 @@ Hằng số ngoài lớp: `HOSTILE_STATES` (cáu, rít: không nhận vuốt, kh
 | FN-REN-04 | `triggerPetFeedback(isClick=false)` | Xử lý một lần vuốt theo kết quả `gameState.pet()`: ok → nhún, tim, rù rù, broadcast; annoyed → 💢, không rù rù; dozing → rù rù khẽ; startled → thôi | — | `gameState.pet(isClick)`, `catAudio`, `officeNetwork.broadcastAction('pet')` | ACT-01, PET-09, PET-10 |
 | FN-REN-05 | `spawnParticle(type, x, y, options)` | Thêm một hạt emoji | → — | Đẩy vào `particles` | REN-04 |
 | FN-REN-06 | `dropFood(foodType)` | Đặt đĩa ăn, bắt đầu ăn, sinh vụn | `foodType` → — | `setBehavior('EATING', 6)`, `catAudio.crunch` | ACT-02 |
-| FN-REN-07 | `update(delta)` | Cập nhật hoạt ảnh, đếm `stateTime` và gọi `onStateEnter` khi đổi trạng thái, `updateRig`, tắt rù rù khi hết vuốt, Zoomies, hạt, bong bóng thoại, đĩa ăn | `delta` → — | Đọc `gameState.behaviorState`; đặt `left/top` của `#cat-speech-bubble`; `catAudio.stopPurr` | REN-02, REN-06, CORE-01, AUD-02 |
+| FN-REN-07 | `update(delta)` | Cập nhật hoạt ảnh, đếm `stateTime` và gọi `onStateEnter` khi đổi trạng thái (rời `WALKING` thì lấy chỗ đang đứng làm chỗ nằm mới), `updateRig`, tắt rù rù khi hết vuốt, đi dạo (đi chậm `WALK_SPEED` tới điểm ngẫu nhiên ở nửa thảm bên kia, quay mặt theo hướng, đứng lại khi đang kéo đồ ăn), Zoomies, hạt, bong bóng thoại (theo hướng mặt), đĩa ăn | `delta` → — | Đọc `gameState.behaviorState`; đặt `left/top` của `#cat-speech-bubble`; `catAudio.stopPurr` | REN-02, REN-06, CORE-01, AUD-02, PET-18 |
 | FN-REN-08 | `updateToys(delta, state)` | Vật lý bóng len (trọng lực, nảy), cần câu đuổi con trỏ | → — | | ACT-06 |
 | FN-REN-09 | `getCoatPalette(furType)` | Trả bảng màu theo màu lông | `furType` → object màu | | CUS-01 |
 | FN-REN-10 | `render()` | Xoá canvas rồi vẽ: sàn → mèo → đồ chơi → hạt | — | | REN-01 |
@@ -146,7 +148,8 @@ Hằng số ngoài lớp: `HOSTILE_STATES` (cáu, rít: không nhận vuốt, kh
 | FN-REN-38 | `endFoodDrag()` | Kết thúc kéo | → `boolean` (thả trúng mèo) | Xoá `foodDrag` | ACT-02 |
 | FN-REN-39 | `renderBrows(ctx, p)` | Lông mày hoạt hình theo `lidTilt`: âm = chau chữ V (cáu), dương = nhướn lo lắng (dỗi, nài nỉ); màu sáng trên lông tối | → — | | PET-09, REN-08 |
 | FN-REN-40 | `renderFoodDropZone()` | Vòng nét đứt quanh mèo khi đang kéo đồ ăn, sáng vàng khi con trỏ ở trên mèo | → — | | ACT-02 |
-| FN-REN-41 | `layoutOnRug()` | Tính vị trí thảm từ `ROOM_BG` (cover, căn đáy), `scale` theo ảnh nền, thử lưới điểm trên thảm và chọn điểm ít bị `getBlockedRects()` che nhất, ưu tiên gần giữa; đặt `runLeft/runRight` cho Zoomies | → — | `getBlockedRects` do app.js gán | REN-05 |
+| FN-REN-41 | `layoutOnRug()` | Tính vị trí thảm từ `ROOM_BG` (cover, căn đáy), `scale` theo ảnh nền, đặt mèo chính giữa thảm; đặt phạm vi Zoomies (`runLeft/runRight`) và đi dạo (`walkLeft/walkRight`) | → — | | REN-05 |
+| FN-REN-42 | `renderWalkLegs(ctx, p)` | Bốn chân khi đứng/đi: độ dài theo `rig.stand` (chân mọc dần khi đứng dậy), bước theo cặp chéo bằng `walkPhase`, chân phía xa tối hơn; vẽ trước thân | → — | | PET-18 |
 
 ---
 
@@ -261,12 +264,12 @@ Không lưu: `behaviorState`, `stateTimer`, `nextAutonomousActionTimer`, `awayFr
 | Module | Feature | Function chính |
 |---|---|---|
 | CORE | CORE-01..05 | FN-APP-30, FN-GS-01..06, FN-REN-07, FN-REN-10 |
-| PET | PET-01..17 | FN-GS-11..17, FN-GS-29, FN-REN-22..25, FN-AUD-17 |
+| PET | PET-01..18 | FN-GS-11..17, FN-GS-29, FN-GS-39, FN-REN-22..25, FN-REN-42, FN-AUD-17 |
 | ACT | ACT-01..11 | FN-GS-15..19, FN-GS-28, FN-REN-03, FN-REN-04, FN-REN-06, FN-REN-16, FN-REN-36..38, FN-APP-08, FN-APP-11..15, FN-APP-33, FN-APP-34 |
 | ECO | ECO-01..12 | FN-GS-20..26, FN-GS-30..38, FN-APP-04, FN-APP-20, FN-APP-22, FN-APP-35..37 |
 | OFF | OFF-01..04 | FN-GS-04, 05, 07..10, FN-APP-05, FN-APP-25, FN-APP-26, FN-APP-29 |
 | CUS | CUS-01..05 | FN-GS-27, FN-REN-09, FN-REN-34, FN-REN-35, FN-APP-09, FN-APP-21 |
-| REN | REN-01..13 | FN-REN-01..41 |
+| REN | REN-01..13 | FN-REN-01..42 |
 | AUD | AUD-01..05 | FN-AUD-01..16 |
-| UI | UI-01..08 | FN-APP-03, FN-APP-07, FN-APP-08, FN-APP-11..24 |
+| UI | UI-01..09 | FN-APP-03, FN-APP-07, FN-APP-08, FN-APP-11..24, FN-APP-38 |
 | NET | NET-01..09 | FN-NET-01..13, FN-SRV-01..08 |

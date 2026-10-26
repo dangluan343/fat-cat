@@ -110,7 +110,7 @@ Delta bị chặn ở 0.1s nên tab ẩn/treo **không** tích lũy thời gian 
 
 - Dữ liệu bền vững nằm trong `this.data`, lưu vào `localStorage` khóa `meow_2d_save_data_v1`. `load()` trộn nông `{...default, ...saved}` nên **thêm trường mới ở cấp trên cùng** trong default là tương thích với save cũ; trường lồng nhau (`vitals`, `stats`...) bị save cũ ghi đè cả khối, nên thêm trường lồng nhau cần tự xử lý khi thiếu.
 - Mỗi lần `notify()` thì `save()` rồi gọi mọi listener (hiện chỉ có `updateHUD`). Hầu như mọi hành động (`addCoins`, `addExp`, `setAction`...) đều gọi `notify()`, nên `updateHUD` dựng lại DOM rất thường xuyên.
-- Trạng thái hành vi **không lưu**: `behaviorState`, `stateTimer`, `nextAutonomousActionTimer`, `petTimes`, `annoyedPets`, `nextBehavior` chỉ nằm trong bộ nhớ. 24 giá trị: `IDLE, PETTING, SLEEPING, YAWNING, LICKING_PAW, ROLLING, BEGGING, EATING, PLAYING, ZOOMIES, SULKING, SLOW_BLINK, CURIOUS, SURPRISED, ANNOYED, KNEADING, BLEP, GREETING, GROOMING, SICK, EXHAUSTED, STARVING, FULL, HISS` (ý nghĩa và kích hoạt: `docs/CAT_ANIMATION.md` mục 4).
+- Trạng thái hành vi **không lưu**: `behaviorState`, `stateTimer`, `nextAutonomousActionTimer`, `petTimes`, `annoyedPets`, `nextBehavior`, `resumeWalk` chỉ nằm trong bộ nhớ. 25 giá trị: `IDLE, PETTING, SLEEPING, YAWNING, LICKING_PAW, ROLLING, BEGGING, EATING, PLAYING, ZOOMIES, SULKING, SLOW_BLINK, CURIOUS, SURPRISED, ANNOYED, KNEADING, BLEP, GREETING, GROOMING, SICK, EXHAUSTED, STARVING, FULL, HISS, WALKING` (ý nghĩa và kích hoạt: `docs/CAT_ANIMATION.md` mục 4).
 - `pet(isClick)` trả `'ok' | 'annoyed' | 'hiss' | 'dozing' | 'startled'`: vuốt ≥ 32 lần trong 10 giây thì `ANNOYED` (không thưởng, `PET_OVERLOAD`); vẫn vuốt 6 lần khi đang cáu thì `HISS`; rê chuột khi mèo ngủ thì ngủ tiếp; bấm khi ngủ thì `SURPRISED`. `slowBlinkAtCat()` cho nút "Nháy mắt" (hồi chiêu 8 giây). Quay lại sau khi vắng thì `GREETING`.
 - **Biểu cảm theo chỉ số** (ngưỡng ở `VITAL_MOODS`): sức khoẻ < 30 → `SICK`; đói < 10 → `STARVING` (thay `BEGGING`); năng lượng < 15 → `EXHAUSTED` (từ chối chơi, `playWithToy` trả `false`); ăn tới đói ≥ 95 → `FULL` sau khi ăn, đã no thì `feed` trả `'full'` và không trừ món. Trạng thái nối tiếp dùng `nextBehavior` (bị xoá mỗi khi `setBehavior`).
 - `setBehavior(state, duration)` đồng thời cập nhật banner "Hành động hiện tại" (`setAction`). `renderer` đọc `gameState.behaviorState` mỗi khung hình để chọn hoạt ảnh.
@@ -140,7 +140,8 @@ Cơ chế "mèo để lại quà như Neko Atsume", đã làm nhưng **chưa com
 - `update(delta)` xử lý hoạt ảnh (thở, chớp mắt, giật tai, nhồi bột, nhai, Zoomies chạy ngang), đếm `stateTime`/gọi `onStateEnter` (ký hiệu ❓❗💢...), `updateRig`, tắt tiếng rù rù khi hết vuốt, vật lý bóng len, hạt hiệu ứng, vị trí bong bóng thoại `#cat-speech-bubble`.
 - Vuốt ve: di chuột vào vùng elip quanh mèo (mỗi ≥260 ms) hoặc bấm giữ gọi `triggerPetFeedback`, từ đó gọi `gameState.pet(isClick)` và phản ứng theo kết quả; chỉ broadcast khi kết quả `ok`.
 - Renderer chỉ đọc `window.gameState` (`behaviorState`, `data.customization`, `data.vitals`, `data.activeToy`) và gọi `pet()`, `setBehavior()`; vì vậy Cat Lab chạy được với một `gameState` giả.
-- **Vị trí mèo**: `resize()` → `layoutOnRug()` tính tấm thảm trên màn hình từ `ROOM_BG` (ảnh nền 1376×768, CSS `cover` + `center bottom`), `scale = cover × 1.2` (kẹp 0.7–1.9), rồi chọn điểm trên thảm ít bị UI che nhất. Các khối UI lấy từ `renderer.getBlockedRects` (app.js gán: dock, thẻ hành động, menu phải, bảng trái). **Đổi ảnh nền hoặc bố cục UI lớn thì phải đo lại `ROOM_BG.rug`/cập nhật danh sách khối.** Đĩa ăn, bóng len đặt lại cạnh mèo mỗi lần resize. Constructor chạy trước `resize()` (có `setTimeout 100ms`).
+- **Vị trí mèo**: `resize()` → `layoutOnRug()` tính tấm thảm trên màn hình từ `ROOM_BG` (ảnh nền 1376×768, CSS `cover` + `center bottom`), `scale = cover × 1.2` (kẹp 0.7–1.9), **mèo nằm chính giữa thảm** (vị trí mặc định do người dùng chọn). **Đổi ảnh nền thì phải đo lại `ROOM_BG.rug`.**
+- **Đi dạo** (`WALKING`): renderer cho mèo đứng dậy (`rig.stand`, `renderWalkLegs`) và đi chậm (`WALK_SPEED`) qua lại trong `walkLeft..walkRight` (nửa giữa thảm), quay mặt theo `facing`. Rời `WALKING` thì `baseX = x` (nằm lại chỗ dừng). Game-state: `startWalking()`, `resumeWalk` cho đi tiếp sau khi tương tác chen ngang (`WALK_CONFIG.NO_RESUME_STATES` thì không). Đĩa ăn, bóng len đặt lại cạnh mèo mỗi lần resize. Constructor chạy trước `resize()` (có `setTimeout 100ms`).
 - Màu lông: `orange_tabby` (gốc), `calico`, `tuxedo`, `black_cat`, `siamese`. Phụ kiện: mũ (`party_hat`, `chef_hat`, `wizard_hat`), kính (`sunglasses`, `round_glasses`), phụ kiện cổ (`red_bowtie`, `gold_bell`).
 
 ### Âm thanh (`CatAudioEngine`)
@@ -151,6 +152,7 @@ Toàn bộ do `AudioContext` tổng hợp: `meow(type)`, `startPurr/stopPurr`, `
 
 - `updateHUD(data)` cập nhật hồ sơ/EXP/xu, 4 thanh chỉ số, danh sách nhiệm vụ, thẻ hành động hiện tại, bong bóng thoại và dock kho đồ.
 - Dock dưới có 5 tab: `food`, `toy`, `outfit`, `decor`, `special`; `renderInventorySlots()` dựng lại theo tab. **Danh mục vật phẩm bị lặp ở nhiều nơi**: dock, `renderShopItems` (catalog), `renderWardrobeGrid`, và định nghĩa món ăn trong `game-state.js` + tên quà trong `GIFT_FOODS`. Thêm một vật phẩm mới phải sửa cả mấy chỗ này.
+- **Giao diện gọn và thu gọn được**: các bảng nổi thu theo `--ui-scale` (CSS `zoom`: 0.85 / 0.78 màn thấp / 0.9 màn lớn), nên đừng đặt kích thước bằng `vw`/`vh` bên trong các bảng đó. Mỗi bảng có `data-collapsible` + nút `data-toggle-panel`; nút "Thu gọn" và phím H thu/mở tất cả; lưu ở localStorage `meow_ui_collapsed`. Bảng nhiệm vụ nằm trong `.top-left-panel` (không đặt `top` cố định nữa).
 - **Cho ăn bằng kéo thả** (không còn nút "Cho ăn"): nhấn giữ ô đồ ăn trong dock → bóng món ăn `.food-drag-ghost` bay theo con trỏ → app gọi `renderer.setFoodDrag()` (mèo chờ ăn, vùng thả nét đứt) → thả trúng mèo (`renderer.endFoodDrag()` trả true) thì `dropFood` + `state.feed`. Dùng Pointer Events nên chạy cả chuột và cảm ứng; bấm tại chỗ chỉ hiện hướng dẫn, thả trượt không mất món.
 - Modal: shop, wardrobe, collection, settings, level-up, gift. Mở bằng `openModal(id)`, đóng bằng `.btn-close-modal` hoặc bấm nền.
 - Đồ chơi `windup_mouse` và `catnip_fish` có trong shop/kho nhưng renderer chưa vẽ gì cho chúng: `renderActiveToys` chỉ xử lý `laser_pointer` và `feather_wand`. Bóng len (`yarn_ball`) là vật thể luôn hiện trên sàn, bấm trực tiếp vào canvas để đá, không đi qua `activeToy`.
@@ -189,6 +191,7 @@ Ghi chú: client có xử lý `user_joined` nhưng server **không bao giờ g�
 |---|---|
 | `meow_2d_save_data_v1` | Toàn bộ `gameState.data` (JSON) |
 | `meow_office_nickname` | Biệt danh hiển thị trong văn phòng |
+| `meow_ui_collapsed` | Bảng UI nào đang thu gọn (`{vitals, quests, actions, dock, action}`) |
 
 Nút "Đặt lại" trong Cài đặt gọi `resetData()` (xóa khóa save rồi reload). Đổi cấu trúc save không tương thích thì nên tăng hậu tố `_v1`.
 
