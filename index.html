@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Meow Cozy Pet - Bé Mập 2D Virtual Cat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Main Game Stage -->
+  <div id="game-container">
+    <!-- Interactive Canvas Layer -->
+    <canvas id="cat-canvas"></canvas>
+
+    <!-- Cat Floating Dialogue Bubble -->
+    <div id="cat-speech-bubble">
+      <span id="bubble-text-content">Purr... thích quá ~ ❤️</span>
+    </div>
+
+    <!-- UI Overlay Layer -->
+    <div class="ui-layer">
+
+      <!-- TOP LEFT: Pet Profile & Vitals -->
+      <div class="top-left-panel">
+        
+        <!-- Profile Card -->
+        <div class="profile-card ui-interactive">
+          <div class="profile-avatar-wrapper">
+            🐱
+          </div>
+          <div class="profile-info">
+            <div class="profile-name-row">
+              <span id="pet-name-display" class="profile-name">Bé Mập</span>
+              <button id="btn-edit-pet-name" class="btn-edit-name" title="Đổi tên cho mèo">✏️</button>
+              <span style="color: #f43f5e; font-size: 14px;">❤️</span>
+            </div>
+            <div class="profile-level-row">
+              <span id="pet-level-display" class="level-tag">Lv. 3</span>
+              <div class="exp-bar-container">
+                <div id="pet-exp-fill" class="exp-bar-fill"></div>
+              </div>
+              <span id="pet-exp-text" style="font-size: 10px; color: #cbd5e1; font-family: monospace;">80/100</span>
+            </div>
+          </div>
+          <div id="pet-coins-badge" class="coins-badge" title="Bấm để vào Cửa Hàng">
+            🪙 <span id="pet-coins-display">280 xu</span>
+          </div>
+        </div>
+
+        <!-- Vitals Bars Card -->
+        <div class="vitals-card ui-interactive">
+          <!-- Đói -->
+          <div class="vital-row">
+            <div class="vital-icon">🍴</div>
+            <div class="vital-label">Đói</div>
+            <div class="vital-bar-track">
+              <div id="vital-hunger-fill" class="vital-bar-fill vital-bar-hunger" style="width: 70%;"></div>
+            </div>
+            <div id="vital-hunger-val" class="vital-val">70/100</div>
+          </div>
+
+          <!-- Vui vẻ -->
+          <div class="vital-row">
+            <div class="vital-icon">😊</div>
+            <div class="vital-label">Vui vẻ</div>
+            <div class="vital-bar-track">
+              <div id="vital-happy-fill" class="vital-bar-fill vital-bar-happy" style="width: 85%;"></div>
+            </div>
+            <div id="vital-happy-val" class="vital-val">85/100</div>
+          </div>
+
+          <!-- Sức khỏe -->
+          <div class="vital-row">
+            <div class="vital-icon">💖</div>
+            <div class="vital-label">Sức khoẻ</div>
+            <div class="vital-bar-track">
+              <div id="vital-health-fill" class="vital-bar-fill vital-bar-health" style="width: 90%;"></div>
+            </div>
+            <div id="vital-health-val" class="vital-val">90/100</div>
+          </div>
+
+          <!-- Năng lượng -->
+          <div class="vital-row">
+            <div class="vital-icon">🌙</div>
+            <div class="vital-label">Năng lượng</div>
+            <div class="vital-bar-track">
+              <div id="vital-energy-fill" class="vital-bar-fill vital-bar-energy" style="width: 60%;"></div>
+            </div>
+            <div id="vital-energy-val" class="vital-val">60/100</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- MIDDLE LEFT: Daily Quests Parchment Note -->
+      <div class="quests-card ui-interactive">
+        <div class="quests-header">
+          <span>Nhiệm vụ hôm nay</span>
+          <span style="font-size: 11px; color: #b45309; font-weight: 800;">REWARD</span>
+        </div>
+        <ul id="daily-quests-list" class="quests-list">
+          <!-- Populated by JS -->
+        </ul>
+      </div>
+
+      <!-- TOP RIGHT: Navigation Buttons -->
+      <div class="top-right-nav ui-interactive">
+        <button id="btn-nav-room" class="nav-btn" title="Không gian phòng">
+          <span class="icon">🏠</span>
+          <span>Phòng</span>
+        </button>
+        <button id="btn-nav-costume" class="nav-btn" title="Trang phục & Màu lông">
+          <span class="icon">👕</span>
+          <span>Trang phục</span>
+        </button>
+        <button id="btn-nav-collection" class="nav-btn" title="Bộ sưu tập & Kỷ niệm">
+          <span class="icon">📖</span>
+          <span>Bộ sưu tập</span>
+        </button>
+        <button id="btn-nav-settings" class="nav-btn" title="Cài đặt âm thanh">
+          <span class="icon">⚙️</span>
+          <span>Cài đặt</span>
+        </button>
+      </div>
+
+      <!-- RIGHT SIDEBAR: Floating Quick Actions -->
+      <div class="right-actions-menu ui-interactive">
+        <button id="btn-quick-feed" class="action-pill-btn" title="Cho mèo ăn">
+          <span class="action-icon">🥣</span>
+          <span>Cho ăn</span>
+        </button>
+        <button id="btn-quick-pet" class="action-pill-btn" title="Vuốt ve xoa đầu">
+          <span class="action-icon">💖</span>
+          <span>Vuốt ve</span>
+        </button>
+        <button id="btn-quick-play" class="action-pill-btn" title="Chơi đùa cùng đồ chơi">
+          <span class="action-icon">🪶</span>
+          <span>Chơi đùa</span>
+        </button>
+        <button id="btn-quick-sleep" class="action-pill-btn" title="Cho mèo đi ngủ">
+          <span class="action-icon">🛌</span>
+          <span>Cho ngủ</span>
+        </button>
+        <button id="btn-quick-roll" class="action-pill-btn" title="Lăn lộn ngửa bụng">
+          <span class="action-icon">🐾</span>
+          <span>Lăn lộn</span>
+        </button>
+        <button id="btn-quick-stretch" class="action-pill-btn" title="Vươn vai ngáp dài">
+          <span class="action-icon">🥱</span>
+          <span>Vươn vai</span>
+        </button>
+      </div>
+
+      <!-- BOTTOM LEFT: Inventory & Item Drawer -->
+      <div class="bottom-inventory-dock ui-interactive">
+        <!-- Category Tabs -->
+        <div class="dock-tabs">
+          <div class="tab-pill active" data-tab="food">🥣 Đồ ăn</div>
+          <div class="tab-pill" data-tab="toy">🪀 Đồ chơi</div>
+          <div class="tab-pill" data-tab="outfit">👕 Trang phục</div>
+          <div class="tab-pill" data-tab="decor">🛋️ Đồ dùng</div>
+          <div class="tab-pill" data-tab="special">⭐ Đặc biệt</div>
+        </div>
+
+        <!-- Inventory Slots Row -->
+        <div id="inventory-slots-row" class="inventory-slots-row">
+          <!-- Rendered dynamically by app.js -->
+        </div>
+      </div>
+
+      <!-- BOTTOM RIGHT: "Hành động hiện tại" Card -->
+      <div class="current-action-card ui-interactive">
+        <div class="action-card-header">Hành động hiện tại</div>
+        <div class="action-card-body">
+          <div class="mini-cat-avatar">🐱</div>
+          <div class="action-card-info">
+            <div id="action-card-title" class="action-title">Đang được vuốt ve</div>
+            <div class="action-progress-bar">
+              <div id="action-card-progress" class="action-progress-fill"></div>
+            </div>
+            <div id="action-card-subtitle" class="action-subtitle">Thích thú quá đi! ❤️</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- CỬA HÀNG / SHOP MODAL -->
+  <div id="shop-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">🏪 Cửa Hàng Mèo Cưng</div>
+        <button class="btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="shop-items-grid" class="grid-cards">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TỦ ĐỒ / TRANG PHỤC MODAL -->
+  <div id="wardrobe-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">👒 Tủ Đồ & Thời Trang</div>
+        <button class="btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="wardrobe-items-grid" class="grid-cards">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BỘ SƯU TẬP / THÀNH TỰU MODAL -->
+  <div id="collection-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">📖 Sổ Sưu Tập & Kỷ Niệm</div>
+        <button class="btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-weight: 800; font-size: 15px; margin-bottom: 12px; color: #f59e0b;">
+          🏆 Danh Hiệu & Thành Tựu
+        </div>
+        <div id="achievements-list" style="display: flex; flex-direction: column; gap: 10px;">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CÀI ĐẶT MODAL -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-title">⚙️ Cài Đặt Game</div>
+        <button class="btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 16px;">
+          <div>
+            <div style="font-weight: 800;">🎵 Nhạc nền Lo-fi Chill</div>
+            <div style="font-size: 12px; color: #94a3b8;">Giai điệu piano điện ấm cúng</div>
+          </div>
+          <button id="btn-toggle-bgm" class="btn-buy" style="width: auto; padding: 6px 16px;">
+            <span id="bgm-status-text">Bật / Tắt</span>
+          </button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 16px;">
+          <div>
+            <div style="font-weight: 800;">🔊 Hiệu ứng âm thanh (SFX)</div>
+            <div style="font-size: 12px; color: #94a3b8;">Tiếng meow, gừ gừ, nhai hạt, chuông</div>
+          </div>
+          <button id="btn-toggle-sfx" class="btn-buy" style="width: auto; padding: 6px 16px;">
+            <span id="sfx-status-text">Bật / Tắt</span>
+          </button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.5); padding: 14px; border-radius: 16px; margin-top: 10px;">
+          <div>
+            <div style="font-weight: 800; color: #ef4444;">🔄 Đặt lại dữ liệu nuôi mèo</div>
+            <div style="font-size: 12px; color: #94a3b8;">Xóa lịch sử và bắt đầu lại từ đầu</div>
+          </div>
+          <button id="btn-reset-game" class="btn-buy" style="width: auto; padding: 6px 16px; background: #dc2626; color: #fff;">
+            Đặt lại
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL UP CELEBRATION MODAL -->
+  <div id="level-up-modal" class="modal-backdrop">
+    <div class="modal-card level-up-modal" style="max-width: 420px;">
+      <div class="level-up-title">🎉 LEVEL UP! 🎉</div>
+      <div class="level-up-sub">
+        Bé mèo đã đạt <b>Cấp độ <span id="level-up-num">4</span></b>!
+      </div>
+      <div style="font-size: 54px; margin: 10px 0;">✨🐱✨</div>
+      <div style="font-size: 15px; font-weight: 800; color: #fde047; margin-bottom: 20px;">
+        Thưởng thăng cấp: +<span id="level-up-bonus-coins">150</span> xu 🪙
+      </div>
+      <button class="btn-buy btn-close-modal" style="width: 100%; padding: 12px; font-size: 15px;">
+        Tuyệt vời! Nhận quà ngay
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast Messages Container -->
+  <div id="toast-container"></div>
+
+  <!-- Office Network & Config Scripts -->
+  <script src="config.js"></script>
+  <script src="network-client.js"></script>
+
+  <!-- Game Scripts -->
+  <script src="audio-synth.js"></script>
+  <script src="game-state.js"></script>
+  <script src="cat-renderer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
