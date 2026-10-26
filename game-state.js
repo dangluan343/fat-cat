@@ -50,6 +50,56 @@ const GIFT_FOODS = {
   catnip_snack: 'Snack Cỏ Mèo'
 };
 
+// ===================================================================
+// NHIỆM VỤ NGÀY, HỘP QUÀ NGÀY, CHUỖI NGÀY (docs/GAMIFICATION.md)
+// ===================================================================
+const QUEST_TIERS = {
+  easy: { label: 'Dễ', coins: 20, exp: 15 },
+  normal: { label: 'Vừa', coins: 35, exp: 25 },
+  hard: { label: 'Khó', coins: 50, exp: 40 }
+};
+
+// Mỗi mẫu nhiệm vụ gắn với một sự kiện gọi qua trackQuest(type)
+const QUEST_POOL = [
+  { type: 'feed', tier: 'easy', icon: '🥣', targets: [2, 3], text: n => `Cho mèo ăn ${n} lần` },
+  { type: 'pet', tier: 'easy', icon: '💖', targets: [20, 30], text: n => `Vuốt ve mèo ${n} lần` },
+  { type: 'slow_blink', tier: 'easy', icon: '😌', targets: [2, 3], text: n => `Nháy mắt với mèo ${n} lần` },
+  { type: 'yarn', tier: 'easy', icon: '🧶', targets: [3, 5], text: n => `Đá bóng len ${n} lần` },
+  { type: 'dress', tier: 'easy', icon: '👒', targets: [1], text: () => 'Thay một bộ đồ cho mèo' },
+  { type: 'room', tier: 'easy', icon: '🌇', targets: [1], text: () => 'Đổi không gian phòng' },
+  { type: 'play', tier: 'normal', icon: '🪶', targets: [2, 3], text: n => `Chơi với mèo ${n} lần` },
+  { type: 'feed_variety', tier: 'normal', icon: '🍱', targets: [2, 3], text: n => `Cho mèo ăn ${n} món khác nhau` },
+  { type: 'sleep_full', tier: 'normal', icon: '🛌', targets: [1], text: () => 'Để mèo ngủ đủ giấc' },
+  { type: 'full_belly', tier: 'hard', icon: '😋', targets: [1], text: () => 'Cho mèo ăn no căng bụng' }
+];
+
+const QUESTS_PER_DAY = 3;
+const QUEST_REROLLS_PER_DAY = 1;
+
+// Hộp quà khi nhận đủ nhiệm vụ trong ngày: thưởng có giới hạn, có chút bất ngờ
+const DAILY_CHEST = {
+  COINS_MIN: 40,
+  COINS_MAX: 80,
+  EXP: 20,
+  FOOD_CHANCE: 0.35,
+  FOODS: ['salmon', 'pate', 'catnip_snack'],
+  COSTUME_CHANCE: 0.1,
+  COSTUMES: { chef_hat: 'Mũ Đầu Bếp', wizard_hat: 'Mũ Phù Thủy', round_glasses: 'Kính Thư Sinh', gold_bell: 'Chuông Vàng' },
+  COSTUME_FALLBACK_COINS: 60
+};
+
+// Chuỗi ngày chăm mèo: chỉ cần nhận 1 nhiệm vụ/ngày; vé đóng băng tự dùng khi lỡ ngày
+const STREAK_CONFIG = {
+  MAX_FREEZES: 2,
+  FREEZE_EVERY_DAYS: 7,
+  MILESTONES: [
+    { days: 3, coins: 50, exp: 30 },
+    { days: 7, coins: 120, exp: 60 },
+    { days: 14, coins: 250, exp: 120 },
+    { days: 30, coins: 500, exp: 250 }
+  ]
+};
+
 class CatGameState {
   constructor() {
     this.STORAGE_KEY = 'meow_2d_save_data_v1';
@@ -94,12 +144,11 @@ class CatGameState {
       
       ownedCostumes: ['orange_tabby', 'party_hat', 'sunglasses', 'red_bowtie'],
       
-      dailyQuests: [
-        { id: 'feed_cat', text: 'Cho mèo ăn', target: 2, current: 1, done: false, rewardCoins: 25, rewardExp: 20 },
-        { id: 'play_cat', text: 'Chơi với mèo 3 lần', target: 3, current: 2, done: false, rewardCoins: 35, rewardExp: 30 },
-        { id: 'pet_cat', text: 'Vuốt ve mèo', target: 15, current: 8, done: false, rewardCoins: 20, rewardExp: 15 },
-        { id: 'sleep_cat', text: 'Để mèo ngủ đủ giấc', target: 1, current: 0, done: false, rewardCoins: 30, rewardExp: 25 }
-      ],
+      // Nhiệm vụ của ngày hiện tại; sinh lại mỗi ngày bởi ensureToday()
+      // { day, list: [{ type, tier, icon, text, target, current, done, claimed, coins, exp }], rerolls, fedFoods, chestClaimed }
+      quests: null,
+      // Chuỗi ngày chăm mèo
+      streak: { count: 0, best: 0, lastDay: null, freezes: 0 },
 
       collection: {
         foodsDiscovered: ['kibble', 'salmon', 'milk', 'pate'],
@@ -139,6 +188,7 @@ class CatGameState {
 
     this.listeners = [];
     this.load();
+    this.ensureToday();
   }
 
   onChange(fn) {
@@ -168,6 +218,8 @@ class CatGameState {
         this.data = { ...this.data, ...parsed };
         // Saves from before offline progress have no lastSeen: treat as just seen.
         if (typeof parsed.lastSeen === 'number') this.awayFrom = parsed.lastSeen;
+        // Bảng nhiệm vụ cũ (4 nhiệm vụ cố định) được thay bằng nhiệm vụ ngày
+        delete this.data.dailyQuests;
       }
     } catch (e) {
       console.warn('Could not load from localStorage', e);
@@ -260,7 +312,7 @@ class CatGameState {
       this.data.vitals.energy = Math.min(100, this.data.vitals.energy + deltaSeconds * 1.5);
       this.data.stats.sleepSeconds += deltaSeconds;
       if (this.data.vitals.energy >= 100) {
-        this.completeQuestProgress('sleep_cat', 1);
+        this.trackQuest('sleep_full');
         this.setAction('Đã ngủ đẫy giấc!', 'Mèo vươn vai tràn đầy năng lượng ✨');
         this.setBehavior('YAWNING', 3);
       }
@@ -522,7 +574,7 @@ class CatGameState {
       this.addCoins(1);
     }
 
-    this.completeQuestProgress('pet_cat', 1);
+    this.trackQuest('pet');
     this.unlockAchievement('first_pet');
 
     if (this.behaviorState !== 'PETTING') {
@@ -543,6 +595,7 @@ class CatGameState {
     this.data.vitals.happiness = Math.min(100, this.data.vitals.happiness + 4);
     this.setBehavior('SLOW_BLINK', 2.8);
     this.addExp(3);
+    this.trackQuest('slow_blink');
     return true;
   }
 
@@ -587,10 +640,16 @@ class CatGameState {
       this.unlockAchievement('gourmet_cat');
     }
 
-    this.completeQuestProgress('feed_cat', 1);
+    this.trackQuest('feed');
+    const fed = this.data.quests.fedFoods;
+    if (!fed.includes(foodId)) fed.push(foodId);
+    this.trackQuest('feed_variety', fed.length, true);
     this.setBehavior('EATING', 3.5);
     // Ăn tới mức no căng thì ăn xong chuyển sang liếm mép, bụng tròn
-    if (this.isFull()) this.nextBehavior = { state: 'FULL', duration: 5 };
+    if (this.isFull()) {
+      this.nextBehavior = { state: 'FULL', duration: 5 };
+      this.trackQuest('full_belly');
+    }
 
     // Audio FX
     if (window.catAudio) {
@@ -622,7 +681,7 @@ class CatGameState {
     this.addExp(18);
     this.addCoins(6);
 
-    this.completeQuestProgress('play_cat', 1);
+    this.trackQuest('play');
 
     if (!this.data.collection.toysUsed.includes(toyId)) {
       this.data.collection.toysUsed.push(toyId);
@@ -698,21 +757,196 @@ class CatGameState {
     }
   }
 
-  // Quests & Achievements
-  completeQuestProgress(questId, amount = 1) {
-    const q = this.data.dailyQuests.find(quest => quest.id === questId);
-    if (q && !q.done) {
-      q.current = Math.min(q.target, q.current + amount);
-      if (q.current >= q.target) {
-        q.done = true;
-        this.addCoins(q.rewardCoins);
-        this.addExp(q.rewardExp);
-        if (window.showToast) {
-          window.showToast(`🎉 Hoàn thành: "${q.text}"! Nhận +${q.rewardCoins} xu, +${q.rewardExp} EXP!`);
-        }
-      }
-      this.notify();
+  // --- NGÀY (theo giờ máy, đổi lúc 0:00) ---
+  todayKey(date = new Date()) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  // Số thứ tự ngày để tính khoảng cách giữa hai ngày (làm tròn để bỏ qua lệch giờ mùa hè)
+  dayIndex(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    return Math.round(new Date(y, m - 1, d).getTime() / 86400000);
+  }
+
+  msUntilReset() {
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return next - now;
+  }
+
+  // Sang ngày mới thì sinh nhiệm vụ mới. Trả về true nếu vừa đổi ngày.
+  ensureToday() {
+    const today = this.todayKey();
+    if (this.data.quests && this.data.quests.day === today) return false;
+    this.data.quests = {
+      day: today,
+      list: this.generateQuests(),
+      rerolls: QUEST_REROLLS_PER_DAY,
+      fedFoods: [],
+      chestClaimed: false
+    };
+    return true;
+  }
+
+  // 1 dễ, 1 vừa, 1 ngẫu nhiên (50% khó), không trùng loại
+  generateQuests() {
+    const list = [];
+    const take = tiers => {
+      const used = list.map(q => q.type);
+      const options = QUEST_POOL.filter(t => tiers.includes(t.tier) && !used.includes(t.type));
+      if (options.length) list.push(this.makeQuest(options[Math.floor(Math.random() * options.length)]));
+    };
+    take(['easy']);
+    take(['normal']);
+    take(Math.random() < 0.5 ? ['hard'] : ['easy', 'normal']);
+    while (list.length < QUESTS_PER_DAY) take(['easy', 'normal', 'hard']);
+    return list;
+  }
+
+  makeQuest(template) {
+    const target = template.targets[Math.floor(Math.random() * template.targets.length)];
+    const tier = QUEST_TIERS[template.tier];
+    return {
+      type: template.type,
+      tier: template.tier,
+      icon: template.icon,
+      text: template.text(target),
+      target,
+      current: 0,
+      done: false,
+      claimed: false,
+      coins: tier.coins,
+      exp: tier.exp
+    };
+  }
+
+  // Ghi nhận tiến độ cho nhiệm vụ cùng loại. absolute = true thì đặt thẳng giá trị (ví dụ số món khác nhau)
+  trackQuest(type, amount = 1, absolute = false) {
+    this.ensureToday();
+    const q = this.data.quests.list.find(item => item.type === type && !item.done);
+    if (!q) return;
+    q.current = Math.min(q.target, absolute ? amount : q.current + amount);
+    if (q.current >= q.target) {
+      q.done = true;
+      if (window.showToast) window.showToast(`✅ Xong nhiệm vụ "${q.text}"! Bấm <b>Nhận</b> để lấy thưởng`);
+      if (window.catAudio) window.catAudio.meow('happy');
     }
+    this.notify();
+  }
+
+  // Nhận thưởng một nhiệm vụ đã xong. Trả về { quest, streak } hoặc null
+  claimQuest(index) {
+    this.ensureToday();
+    const q = this.data.quests.list[index];
+    if (!q || !q.done || q.claimed) return null;
+    q.claimed = true;
+    this.addCoins(q.coins);
+    this.addExp(q.exp);
+    const streak = this.recordStreakDay();
+    this.setBehavior('GREETING', 2);
+    this.notify();
+    return { quest: q, streak };
+  }
+
+  // Đổi một nhiệm vụ chưa xong, mỗi ngày QUEST_REROLLS_PER_DAY lần; ưu tiên cùng mức khó
+  rerollQuest(index) {
+    this.ensureToday();
+    const quests = this.data.quests;
+    const q = quests.list[index];
+    if (!q || q.done || quests.rerolls <= 0) return false;
+    const used = quests.list.map(item => item.type);
+    const free = QUEST_POOL.filter(t => !used.includes(t.type));
+    const sameTier = free.filter(t => t.tier === q.tier);
+    const options = sameTier.length ? sameTier : free;
+    if (!options.length) return false;
+    quests.list[index] = this.makeQuest(options[Math.floor(Math.random() * options.length)]);
+    quests.rerolls--;
+    this.notify();
+    return true;
+  }
+
+  isDailyChestReady() {
+    const quests = this.data.quests;
+    return !!quests && !quests.chestClaimed && quests.list.every(q => q.claimed);
+  }
+
+  // Mở hộp quà ngày khi đã nhận đủ nhiệm vụ. Trả về danh sách phần thưởng hoặc null
+  claimDailyChest() {
+    this.ensureToday();
+    if (!this.isDailyChestReady()) return null;
+    const c = DAILY_CHEST;
+    const rewards = [];
+    let coins = c.COINS_MIN + Math.floor(Math.random() * (c.COINS_MAX - c.COINS_MIN + 1));
+
+    if (Math.random() < c.FOOD_CHANCE) {
+      const food = c.FOODS[Math.floor(Math.random() * c.FOODS.length)];
+      this.data.inventory[food] = (this.data.inventory[food] || 0) + 1;
+      rewards.push({ icon: '🎁', label: GIFT_FOODS[food], amount: 'x1' });
+    }
+    if (Math.random() < c.COSTUME_CHANCE) {
+      const missing = Object.keys(c.COSTUMES).filter(id => !this.data.ownedCostumes.includes(id));
+      if (missing.length) {
+        const id = missing[Math.floor(Math.random() * missing.length)];
+        this.data.ownedCostumes.push(id);
+        rewards.push({ icon: '👑', label: c.COSTUMES[id], amount: 'Đồ mới!' });
+      } else {
+        coins += c.COSTUME_FALLBACK_COINS;
+      }
+    }
+    rewards.unshift({ icon: '🪙', label: 'Xu', amount: `+${coins}` }, { icon: '⭐', label: 'EXP', amount: `+${c.EXP}` });
+
+    this.data.quests.chestClaimed = true;
+    this.addCoins(coins);
+    this.addExp(c.EXP);
+    this.setBehavior('KNEADING', 4);
+    this.notify();
+    return { coins, rewards };
+  }
+
+  // Ghi nhận ngày có chăm mèo (lần nhận nhiệm vụ đầu tiên trong ngày).
+  // Lỡ ngày thì tự dùng vé đóng băng; hết vé thì chuỗi về 1, kỷ lục giữ nguyên.
+  recordStreakDay() {
+    const today = this.todayKey();
+    const s = this.data.streak;
+    if (s.lastDay === today) return null;
+
+    const gap = s.lastDay ? this.dayIndex(today) - this.dayIndex(s.lastDay) : null;
+    let usedFreezes = 0;
+    if (gap === 1) {
+      s.count++;
+    } else if (gap !== null && gap > 1 && gap - 1 <= s.freezes) {
+      usedFreezes = gap - 1;
+      s.freezes -= usedFreezes;
+      s.count++;
+    } else {
+      s.count = 1;
+    }
+    s.lastDay = today;
+    s.best = Math.max(s.best, s.count);
+
+    let freezeEarned = false;
+    if (s.count % STREAK_CONFIG.FREEZE_EVERY_DAYS === 0 && s.freezes < STREAK_CONFIG.MAX_FREEZES) {
+      s.freezes++;
+      freezeEarned = true;
+    }
+    const milestone = STREAK_CONFIG.MILESTONES.find(m => m.days === s.count) || null;
+    if (milestone) {
+      this.addCoins(milestone.coins);
+      this.addExp(milestone.exp);
+    }
+    return { count: s.count, usedFreezes, freezeEarned, milestone };
+  }
+
+  // Trạng thái chuỗi để hiển thị: chuỗi còn sống nếu hôm nay đã giữ, hoặc số ngày lỡ vẫn đủ vé đóng băng
+  getStreakView() {
+    const s = this.data.streak;
+    const base = { best: s.best, freezes: s.freezes };
+    if (!s.lastDay) return { ...base, count: 0, activeToday: false };
+    const gap = this.dayIndex(this.todayKey()) - this.dayIndex(s.lastDay);
+    if (gap <= 0) return { ...base, count: s.count, activeToday: true };
+    if (gap - 1 <= s.freezes) return { ...base, count: s.count, activeToday: false };
+    return { ...base, count: 0, activeToday: false };
   }
 
   unlockAchievement(id) {
@@ -757,6 +991,7 @@ class CatGameState {
   equipCostume(type, itemId) {
     this.data.customization[type] = itemId;
     this.unlockAchievement('stylish_pet');
+    this.trackQuest('dress');
     this.notify();
   }
 }

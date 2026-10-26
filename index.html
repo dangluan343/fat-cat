@@ -94,14 +94,16 @@
       </div>
 
       <!-- MIDDLE LEFT: Daily Quests Parchment Note -->
-      <div class="quests-card ui-interactive">
+      <div id="quests-card" class="quests-card ui-interactive">
         <div class="quests-header">
           <span>Nhiệm vụ hôm nay</span>
-          <span style="font-size: 11px; color: #b45309; font-weight: 800;">REWARD</span>
+          <span id="quest-streak" class="quest-streak">🔥 0</span>
         </div>
+        <div id="quest-reset" class="quest-reset">Làm mới sau --</div>
         <ul id="daily-quests-list" class="quests-list">
           <!-- Populated by JS -->
         </ul>
+        <div id="quest-chest" class="quest-chest"></div>
       </div>
 
       <!-- TOP RIGHT: Navigation Buttons -->
@@ -305,6 +307,18 @@
       <div id="gift-list" class="gift-list"></div>
       <button id="btn-claim-gifts" class="btn-buy" style="width: 100%; padding: 12px; font-size: 15px;">
         Nhận quà ngay
+      </button>
+    </div>
+  </div>
+
+  <!-- REWARD MODAL (hộp quà ngày, mốc chuỗi) -->
+  <div id="reward-modal" class="modal-backdrop">
+    <div class="modal-card level-up-modal" style="max-width: 420px;">
+      <div id="reward-title" class="level-up-title" style="font-size: 26px;">🎁 Phần thưởng</div>
+      <div id="reward-subtitle" class="level-up-sub"></div>
+      <div id="reward-list" class="gift-list"></div>
+      <button class="btn-buy btn-close-modal" style="width: 100%; padding: 12px; font-size: 15px;">
+        Tuyệt vời!
       </button>
     </div>
   </div>

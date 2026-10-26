@@ -11,7 +11,7 @@ Danh sách chức năng kỹ thuật (hàm / phương thức / bộ xử lý s�
 
 ## 1. GS — `game-state.js` (lớp `CatGameState`, toàn cục `window.gameState`)
 
-Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET_OVERLOAD` (ngưỡng vuốt quá lâu), `SLOW_BLINK_COOLDOWN_MS`, `UNINTERRUPTIBLE_STATES` (trạng thái AI không ngắt), `VITAL_MOODS` (ngưỡng ốm/kiệt sức/đói lả/no căng/rít), `GIFT_FOODS` (id → tên đồ ăn dùng cho quà).
+Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET_OVERLOAD` (ngưỡng vuốt quá lâu), `SLOW_BLINK_COOLDOWN_MS`, `UNINTERRUPTIBLE_STATES` (trạng thái AI không ngắt), `VITAL_MOODS` (ngưỡng ốm/kiệt sức/đói lả/no căng/rít), `GIFT_FOODS` (id → tên đồ ăn dùng cho quà), `QUEST_TIERS` (thưởng theo mức), `QUEST_POOL` (kho 10 loại nhiệm vụ), `QUESTS_PER_DAY`, `QUEST_REROLLS_PER_DAY`, `DAILY_CHEST`, `STREAK_CONFIG`.
 
 | ID | Hàm | Mô tả | Vào → Ra | Phụ thuộc / Hiệu ứng phụ | Feature |
 |---|---|---|---|---|---|
@@ -38,12 +38,21 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 | FN-GS-21 | `addExp(amount)` | Cộng EXP, kiểm tra lên cấp | `amount` → — | Gọi `levelUp()` khi đủ, ngược lại `notify()` | ECO-02 |
 | FN-GS-22 | `levelUp()` | Tăng cấp, tính EXP kế tiếp, thưởng xu | — | `expToNext = round(level × 100 × 1.15)`; thưởng `level × 50` xu; `catAudio.levelUp`; gọi `window.showLevelUpModal` | ECO-02 |
 | FN-GS-23 | `renamePet(newName)` | Đổi tên mèo (bỏ qua chuỗi rỗng) | `newName` → — | `notify()` | UI-01 |
-| FN-GS-24 | `completeQuestProgress(questId, amount=1)` | Tăng tiến độ nhiệm vụ; xong thì thưởng | → — | Thưởng xu + EXP, `showToast`; bỏ qua nhiệm vụ đã xong | ECO-05 |
+| FN-GS-24 | ~~`completeQuestProgress`~~ | **Đã thay** (2026-10-26) bằng FN-GS-33 `trackQuest` (nhiệm vụ ngày) | | | ECO-05 |
 | FN-GS-25 | `unlockAchievement(id)` | Mở khoá thành tựu một lần | `id` → — | `+50` xu, `+40` EXP, `showToast` | ECO-06 |
 | FN-GS-26 | `buyItem(category, itemId, price)` | Mua vật phẩm | `food`/`toy`/`costume` → `boolean` | Trừ xu; thêm vào kho/đồ chơi/trang phục; không đủ xu thì toast lỗi và trả `false` | ECO-03 |
 | FN-GS-27 | `equipCostume(type, itemId)` | Mặc/tháo trang phục | `type`: hat/glasses/accessory/fur | Ghi `customization[type]`; mở `stylish_pet` | CUS-01..04 |
 | FN-GS-28 | `slowBlinkAtCat()` | Người chơi nháy mắt chậm, mèo nháy lại | — → `boolean` | `false` khi mèo ngủ/cáu hoặc còn hồi chiêu `SLOW_BLINK_COOLDOWN_MS`; ngược lại +4 vui, `SLOW_BLINK` 2.8 giây, `addExp(3)` | ACT-10 |
 | FN-GS-29 | `isFull()` | Đói ≥ `VITAL_MOODS.FULL_HUNGER` | — → `boolean` | | PET-16 |
+| FN-GS-30 | `todayKey(date)`, `dayIndex(key)`, `msUntilReset()` | Khoá ngày `YYYY-MM-DD` theo giờ máy, số thứ tự ngày (làm tròn bỏ lệch giờ mùa hè), mili giây tới 0:00 | → `string` / `number` | | ECO-05, ECO-11 |
+| FN-GS-31 | `ensureToday()` | Sang ngày mới thì sinh nhiệm vụ mới, đặt lại lượt đổi, món đã ăn, hộp quà | — → `boolean` (vừa đổi ngày) | Gọi ở constructor, mỗi 15 giây và khi quay lại tab (app.js) | ECO-05 |
+| FN-GS-32 | `generateQuests()`, `makeQuest(template)` | Bốc 3 nhiệm vụ (1 dễ, 1 vừa, 1 ngẫu nhiên 50% khó, không trùng loại); dựng nhiệm vụ với mục tiêu ngẫu nhiên và thưởng theo mức | → mảng / object | | ECO-05 |
+| FN-GS-33 | `trackQuest(type, amount=1, absolute=false)` | Cộng tiến độ cho nhiệm vụ cùng loại chưa xong; đủ thì đánh dấu xong, toast "Bấm Nhận", tiếng meo vui | → — | Gọi từ `feed`, `pet`, `playWithToy`, `slowBlinkAtCat`, `equipCostume`, `updateVitals` (ngủ đủ), renderer (đá bóng len), app (đổi phòng) | ECO-05 |
+| FN-GS-34 | `rerollQuest(index)` | Đổi nhiệm vụ chưa xong, ưu tiên cùng mức | → `boolean` | Trừ `quests.rerolls` | ECO-09 |
+| FN-GS-35 | `claimQuest(index)` | Nhận thưởng nhiệm vụ đã xong: cộng xu/EXP, ghi chuỗi ngày, mèo `GREETING` | → `{ quest, streak }` / `null` | Gọi `recordStreakDay` | ECO-05, ECO-11 |
+| FN-GS-36 | `isDailyChestReady()`, `claimDailyChest()` | Kiểm tra / mở hộp quà ngày khi đã nhận đủ: xu ngẫu nhiên, EXP, có thể kèm món ăn hoặc trang phục; mèo `KNEADING` | → `boolean` / `{ coins, rewards }` / `null` | | ECO-10 |
+| FN-GS-37 | `recordStreakDay()` | Ghi ngày có chăm mèo: liên tiếp thì +1, lỡ ngày thì dùng vé đóng băng nếu đủ, không thì về 1; cập nhật kỷ lục, tặng vé mỗi 7 ngày, thưởng mốc | → `{ count, usedFreezes, freezeEarned, milestone }` / `null` (đã ghi hôm nay) | | ECO-11 |
+| FN-GS-38 | `getStreakView()` | Chuỗi để hiển thị: còn sống (hôm nay đã giữ, hoặc số ngày lỡ ≤ số vé) hay đã đứt (hiện 0) | → `{ count, best, freezes, activeToday }` | | ECO-11, UI-08 |
 
 ---
 
@@ -54,7 +63,7 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 | FN-APP-01 | Khởi tạo (callback `DOMContentLoaded`) | Tạo `CatRenderer` và gán `renderer.getBlockedRects` (khung dock, thẻ hành động, menu phải, bảng trái), gắn mọi handler, vẽ HUD đầu, chạy `resumeFromAway`, bắt đầu vòng lặp | — | Toàn bộ UI | CORE-01, REN-05 |
 | FN-APP-02 | `unlockAudio()` | Khởi tạo `AudioContext` ở click/phím đầu tiên rồi tự gỡ listener | — | `audio.init()` | AUD-05 |
 | FN-APP-03 | `window.showToast(msg)` | Hiện toast HTML, tự tắt sau 2.8 giây | `msg` (HTML) → — | Chèn vào `#toast-container` (dùng `innerHTML`) | UI-07 |
-| FN-APP-04 | `window.showLevelUpModal(level, bonus)` | Mở hộp thoại lên cấp và bắn 20 hạt | → — | `#level-up-modal`, `renderer.spawnParticle` | ECO-02, UI-06 |
+| FN-APP-04 | `window.showLevelUpModal(level, bonus)` | Mở hộp thoại lên cấp (qua hàng đợi chúc mừng, hoãn một nhịp để phần thưởng gây lên cấp hiện trước) và bắn 20 hạt | → — | `#level-up-modal`, `renderer.spawnParticle` | ECO-02, UI-06, ECO-12 |
 | FN-APP-05 | `showGiftModal(awaySeconds)` | Dựng danh sách quà và mở hộp thoại; không làm gì nếu hết quà | `awaySeconds` hoặc `null` → — | Đọc `pendingGifts`; `#gift-modal` | OFF-04 |
 | FN-APP-06 | `formatAway(seconds)` | Định dạng "X giờ Y phút" | → `string` | — | OFF-04 |
 | FN-APP-07 | `updateHUD(data)` | Vẽ lại hồ sơ, chỉ số, nhiệm vụ, thẻ hành động, bong bóng thoại (câu riêng cho 24 trạng thái), dock | `data` → — | Là listener của `onChange`; gọi `renderInventorySlots`; **dựng lại DOM mỗi lần** | UI-01, UI-02, UI-08, REN-06 |
@@ -74,7 +83,7 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 | FN-APP-21 | `renderWardrobeGrid()` | Dựng lưới tủ đồ; Mặc/Tháo/Cần mở khoá | — | Gọi `equipCostume`; nhắc vào cửa hàng nếu chưa sở hữu | CUS-01..04 |
 | FN-APP-22 | `renderCollectionData()` | Dựng danh sách thành tựu | — | Đọc `collection.achievements` | ECO-06, ECO-07 |
 | FN-APP-23 | `openModal(id)` | Mở modal; modal có dữ liệu thì dựng trước | `id` → — | Thêm class `open` | UI-06 |
-| FN-APP-24 | `closeModal(modal)` + gắn nút đóng / bấm nền | Đóng modal; riêng `gift-modal` không đóng khi bấm nền | → — | `.btn-close-modal`, `.modal-backdrop` | UI-06 |
+| FN-APP-24 | `closeModal(modal)` + gắn nút đóng / bấm nền | Đóng modal; riêng `gift-modal` không đóng khi bấm nền; đóng hộp thoại chúc mừng thì mở cái đang chờ | → — | `.btn-close-modal`, `.modal-backdrop`, `celebrationQueue` | UI-06, ECO-12 |
 | FN-APP-25 | Nút "Nhận quà ngay" | Gọi `claimGifts`, đóng modal, toast tổng kết | — | `#btn-claim-gifts` | OFF-04 |
 | FN-APP-26 | Bộ lắng nghe rời/quay lại | `visibilitychange` (ẩn → `markAway`; hiện → `resumeFromAway`), `pagehide` → `markAway`, `setInterval` 15 giây lưu khi tab hiển thị | — | | OFF-01 |
 | FN-APP-27 | Nút Đặt lại dữ liệu | Hộp xác nhận rồi `resetData()` | — | `confirm()` | CORE-04 |
@@ -85,6 +94,9 @@ Hằng số ngoài lớp: `OFFLINE_CONFIG` (tham số cân bằng offline), `PET
 | FN-APP-32 | Huy hiệu xu | Mở cửa hàng | — | | ECO-03 |
 | FN-APP-33 | Nút Nháy mắt | Gọi `slowBlinkAtCat`; toast theo kết quả (thành công / mèo ngủ / hồi chiêu); broadcast `blink` | — | `#btn-quick-blink` | ACT-10, UI-04 |
 | FN-APP-34 | Kéo thả đồ ăn: `beginFoodDrag(food, e)`, `finishFoodDrag(e, cancelled)` + lắng nghe `pointermove`/`pointerup`/`pointercancel`/Escape | Bóng món ăn (HTML, nằm trên mọi lớp UI) bay theo con trỏ; di > 6px mới tính là kéo và báo vị trí cho renderer; thả trúng mèo: mèo đã no thì từ chối (`feed` trả `full`, không trừ món), không thì `dropFood` + `feed` + toast + broadcast `feed`; bấm tại chỗ thì hướng dẫn; thả trượt thì nhắc | — | `.food-drag-ghost`; dọn mọi bóng sót khi kết thúc | ACT-02, PET-16 |
+| FN-APP-35 | `renderQuests(data)` + bộ xử lý bấm trên `#quests-card` | Dựng bảng nhiệm vụ (chuỗi, đồng hồ, nhiệm vụ, hộp quà), chỉ dựng lại khi dữ liệu đổi; bấm Nhận / Đổi / Mở hộp qua `data-action` | — | `claimQuest`, `rerollQuest`, `claimDailyChest`, `flyCoins`, `showRewardModal`, broadcast `quest` | ECO-05, ECO-09..11, UI-08 |
+| FN-APP-36 | `showRewardModal({title, subtitle, items})`, `flyCoins(fromEl, count)`, `formatCountdown(ms)` | Hộp thoại phần thưởng chung (hộp quà ngày, mốc chuỗi); xu bay từ nút về ví; định dạng "X giờ Y phút" | → — | `#reward-modal`, `.flying-coin` | ECO-10, ECO-11 |
+| FN-APP-37 | `showCelebration(id, setup)`, `checkNewDay()` | Mở hộp thoại chúc mừng hoặc xếp hàng nếu đang có cái khác mở; kiểm tra sang ngày mới (mỗi 15 giây, khi quay lại tab) và báo có nhiệm vụ mới | → — | `CELEBRATION_MODALS`, `celebrationQueue` | ECO-12, ECO-05 |
 
 ---
 
@@ -214,7 +226,8 @@ Mọi hàm âm thanh đều thoát sớm khi `isMuted`, và gọi `init()` để
 | `ownedToys`, `activeToy` | string[], string\|null | Đồ chơi sở hữu, đồ chơi đang dùng |
 | `customization` | `{fur, hat, glasses, accessory, roomTheme}` | Trang phục đang mặc |
 | `ownedCostumes` | string[] | Trang phục đã mở khoá |
-| `dailyQuests` | `{id, text, target, current, done, rewardCoins, rewardExp}[]` | 4 nhiệm vụ |
+| `quests` | `{day, list: [{type, tier, icon, text, target, current, done, claimed, coins, exp}], rerolls, fedFoods, chestClaimed}` | Nhiệm vụ của ngày hiện tại (thay `dailyQuests` cũ, save cũ được xoá khi nạp) |
+| `streak` | `{count, best, lastDay, freezes}` | Chuỗi ngày chăm mèo |
 | `collection` | `{foodsDiscovered, toysUsed, achievements}` | Sổ sưu tập |
 | `stats` | `{petCount, timesFed, timesPlayed, sleepSeconds}` | Thống kê |
 | `lastSeen` | number (ms) | *(nhánh offline)* lần cuối có mặt |
@@ -227,7 +240,7 @@ Không lưu: `behaviorState`, `stateTimer`, `nextAutonomousActionTimer`, `awayFr
 | Hướng | `type` | Trường | Ghi chú |
 |---|---|---|---|
 | C→S | `set_nickname` | `nickname` | Cắt 30 ký tự |
-| C→S | `action` | `actionType, detail, icon, themeColor` | `actionType`: pet, feed, toy, outfit, sleep, room, rename, roll, stretch, special |
+| C→S | `action` | `actionType, detail, icon, themeColor` | `actionType`: pet, feed, toy, outfit, sleep, room, rename, roll, stretch, special, blink, quest |
 | S→C | `welcome` | `clientId, ip, hostname, onlineCount, serverIp` | Chỉ gửi cho chính client |
 | S→C | `system_broadcast` | `message, onlineCount` | Khi có người vào |
 | S→C | `action_broadcast` | `id, senderId, clientIp, hostname, nickname, displayName, actionType, detail, icon, themeColor, timestamp` | Gửi cho mọi máy |
@@ -250,7 +263,7 @@ Không lưu: `behaviorState`, `stateTimer`, `nextAutonomousActionTimer`, `awayFr
 | CORE | CORE-01..05 | FN-APP-30, FN-GS-01..06, FN-REN-07, FN-REN-10 |
 | PET | PET-01..17 | FN-GS-11..17, FN-GS-29, FN-REN-22..25, FN-AUD-17 |
 | ACT | ACT-01..11 | FN-GS-15..19, FN-GS-28, FN-REN-03, FN-REN-04, FN-REN-06, FN-REN-16, FN-REN-36..38, FN-APP-08, FN-APP-11..15, FN-APP-33, FN-APP-34 |
-| ECO | ECO-01..08 | FN-GS-20..26, FN-APP-04, FN-APP-20, FN-APP-22 |
+| ECO | ECO-01..12 | FN-GS-20..26, FN-GS-30..38, FN-APP-04, FN-APP-20, FN-APP-22, FN-APP-35..37 |
 | OFF | OFF-01..04 | FN-GS-04, 05, 07..10, FN-APP-05, FN-APP-25, FN-APP-26, FN-APP-29 |
 | CUS | CUS-01..05 | FN-GS-27, FN-REN-09, FN-REN-34, FN-REN-35, FN-APP-09, FN-APP-21 |
 | REN | REN-01..13 | FN-REN-01..41 |

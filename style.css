@@ -344,7 +344,7 @@ body {
   position: absolute;
   top: 260px;
   left: 24px;
-  width: 235px;
+  width: 252px;
   background: #fef9c3;
   color: #422006;
   border-radius: 12px;
@@ -386,41 +386,190 @@ body {
   flex-direction: column;
   gap: 8px;
   list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
+/* Chuỗi ngày 🔥 và đồng hồ làm mới */
+.quest-streak {
+  font-size: 12px;
+  font-weight: 900;
+  color: #c2410c;
+  background: #ffedd5;
+  border: 1px solid #fdba74;
+  border-radius: 999px;
+  padding: 1px 8px;
+  cursor: help;
+}
+
+.quest-streak.inactive {
+  color: #78716c;
+  background: #f5f5f4;
+  border-color: #d6d3d1;
+}
+
+.quest-reset {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #a16207;
+  margin: -4px 0 8px;
+}
+
+/* Một nhiệm vụ: icon | nội dung + thanh tiến độ | nút */
 .quest-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
   color: #451a03;
+  padding: 6px 6px;
+  border-radius: 10px;
+  transition: background 0.2s;
 }
 
-.quest-checkbox {
-  width: 17px;
-  height: 17px;
-  border: 2px solid #ca8a04;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
-  cursor: pointer;
-  transition: all 0.2s;
+.quest-item.done:not(.claimed) {
+  background: #dcfce7;
+  box-shadow: inset 0 0 0 1.5px #86efac;
+}
+
+.quest-item.claimed {
+  opacity: 0.6;
+}
+
+.quest-item.claimed .quest-text {
+  text-decoration: line-through;
+}
+
+.quest-icon {
+  font-size: 20px;
   flex-shrink: 0;
 }
 
-.quest-checkbox.checked {
-  background: #16a34a;
-  border-color: #15803d;
-  color: #ffffff;
-  font-size: 11px;
+.quest-body {
+  flex: 1;
+  min-width: 0;
 }
 
-.quest-item.checked span {
-  text-decoration: line-through;
-  opacity: 0.65;
+.quest-text {
+  line-height: 1.25;
+}
+
+.quest-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #fde68a;
+  overflow: hidden;
+  margin: 4px 0 3px;
+}
+
+.quest-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f59e0b, #16a34a);
+  transition: width 0.4s ease;
+}
+
+.quest-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: #92400e;
+}
+
+.quest-reward {
+  font-weight: 800;
+}
+
+.quest-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #fff;
+  background: #16a34a;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #15803d;
+  animation: questReady 1.2s ease-in-out infinite;
+}
+
+.quest-btn:hover {
+  background: #22c55e;
+}
+
+@keyframes questReady {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.quest-reroll {
+  flex-shrink: 0;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 3px 5px;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.quest-reroll:hover {
+  opacity: 1;
+}
+
+.quest-claimed {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Hộp quà ngày */
+.quest-chest {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 2px dashed #ca8a04;
+  font-size: 12px;
+  font-weight: 800;
+  color: #713f12;
+  text-align: center;
+}
+
+.chest-dots {
+  letter-spacing: 2px;
+  color: #ca8a04;
+}
+
+.quest-chest-btn {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #451a03;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+  cursor: pointer;
+  box-shadow: 0 3px 0 #b45309;
+  animation: questReady 1.2s ease-in-out infinite;
+}
+
+/* Xu bay về ví khi nhận thưởng */
+.flying-coin {
+  position: fixed;
+  z-index: 400;
+  font-size: 22px;
+  pointer-events: none;
+  margin: -11px 0 0 -11px;
+  transition: transform 0.75s cubic-bezier(0.5, -0.3, 0.6, 1), opacity 0.75s ease-in;
 }
 
 /* Top Right Navigation Buttons */

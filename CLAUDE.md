@@ -7,6 +7,7 @@ Game nuôi mèo ảo 2D chạy trên trình duyệt, kèm server Node.js nhỏ �
 - Không có build step, không có bundler, không có framework, không có test, không có linter. Toàn bộ frontend là vanilla JS nạp bằng thẻ `<script>`.
 - Tài liệu phân rã: [docs/FEATURE_LIST.md](docs/FEATURE_LIST.md) (feature theo module, mã `CORE-01`..., ưu tiên, trạng thái, backlog) và [docs/FUNCTION_LIST.md](docs/FUNCTION_LIST.md) (từng hàm, mã `FN-GS-01`..., liên kết về feature). Khi thêm/sửa tính năng hoặc hàm, cập nhật cả hai file và giữ mã ổn định.
 - Model mèo, biểu cảm, hành động: [docs/CAT_ANIMATION.md](docs/CAT_ANIMATION.md). Mọi thay đổi animation đi qua **Cat Lab** trước (xem "Quy trình làm việc").
+- Nhiệm vụ, phần thưởng, chuỗi ngày (nghiên cứu Gamification UX + kế hoạch các giai đoạn): [docs/GAMIFICATION.md](docs/GAMIFICATION.md). Nguyên tắc: thưởng là ghi nhận chứ không phải mồi nhử, có lựa chọn, chuỗi ngày nhân hậu, không phạt mèo, không mua bằng tiền thật.
 
 ## Quy trình làm việc
 
@@ -119,7 +120,7 @@ Delta bị chặn ở 0.1s nên tab ẩn/treo **không** tích lũy thời gian 
 - **AI tự trị** (`tickAutonomousAI`): mỗi 8–16 giây chọn hành động, không ngắt các trạng thái trong `UNINTERRUPTIBLE_STATES`: đói (<35) thì `BEGGING`; năng lượng thấp (<25) thì `SLEEPING`; năng lượng cao (>80) có 25% bùng `ZOOMIES` (+5 xu, +20 vui); vui < 30 có 50% `SULKING`; còn lại chọn ngẫu nhiên ngáp/liếm chân/rửa mặt/lăn/tò mò/thè lưỡi/đứng yên, vui > 65 thêm nháy mắt chậm và nhồi bột.
 - Tiến trình: `addExp` → `levelUp` (EXP cần = `level * 100 * 1.15`, thưởng `level * 50` xu, gọi `window.showLevelUpModal`). Cửa hàng: `buyItem(category, id, price)` với `category` là `food | toy | costume`.
 - Món ăn (`feed`) định nghĩa trong hàm: `kibble, salmon, milk, pate, dried_fish, catnip_snack`, mỗi món có chỉ số hunger/happiness/health/exp riêng.
-- Nhiệm vụ hằng ngày (`dailyQuests`): `feed_cat`, `play_cat`, `pet_cat`, `sleep_cat`, cập nhật qua `completeQuestProgress`.
+- **Nhiệm vụ ngày** (`data.quests`, thiết kế ở `docs/GAMIFICATION.md`): `ensureToday()` sinh 3 nhiệm vụ từ `QUEST_POOL` mỗi ngày (khoá ngày theo giờ máy, đổi lúc 0:00). Gameplay báo tiến độ bằng `trackQuest(type)`; thêm loại nhiệm vụ mới = thêm mẫu vào `QUEST_POOL` + gọi `trackQuest` ở chỗ xảy ra sự kiện. Người chơi bấm "Nhận" (`claimQuest`), đổi 1 lần/ngày (`rerollQuest`), nhận đủ thì mở hộp quà ngày (`claimDailyChest`). Chuỗi ngày (`data.streak`) ghi ở lần nhận đầu tiên mỗi ngày (`recordStreakDay`), có vé đóng băng. Save cũ có `dailyQuests` được xoá khi nạp.
 - Thành tựu: `first_pet`, `gourmet_cat`, `stylish_pet`, `laser_chaser`, `zoomies_champ` (`laser_chaser` chưa có chỗ nào mở khóa).
 
 ### Tiến trình offline (nhánh `feat/offline-progress`)
@@ -202,7 +203,7 @@ Nút "Đặt lại" trong Cài đặt gọi `resetData()` (xóa khóa save rồi
 4. Không có xác thực hay giới hạn tần suất phía server cho tin `action`.
 
 **Logic/gameplay:**
-5. **Nhiệm vụ hằng ngày không reset.** Không có logic ngày; sau khi hoàn thành là xong vĩnh viễn. Dữ liệu mặc định còn cài sẵn tiến độ dở dang (ví dụ `feed_cat` đã 1/2).
+5. ~~Nhiệm vụ hằng ngày không reset~~: đã sửa (nhiệm vụ ngày + chuỗi ngày, 2026-10-26). Ngày tính theo đồng hồ máy người chơi nên đổi giờ máy là "qua ngày" được; chấp nhận vì không có xếp hạng hay phần thưởng tiền thật.
 6. `super_tonic` miễn phí và vô hạn (xem trên); `laser_chaser` không có đường nào mở khóa; `windup_mouse`/`catnip_fish` chưa có hoạt ảnh.
 7. Dữ liệu mặc định ở lần chơi đầu đã là Lv.3, 280 xu và có sẵn vài thành tựu.
 8. Hunger giảm rất nhanh khi đang mở tab (~17 phút từ đầy đến cạn) so với tốc độ kiếm xu, nên nếu mở tab lâu mèo sẽ liên tục đòi ăn.

@@ -38,21 +38,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2800);
   };
 
+  // --- HỘP THOẠI CHÚC MỪNG XẾP HÀNG ---
+  // Quà offline, lên cấp, phần thưởng có thể xảy ra cùng lúc (mở hộp quà → lên cấp);
+  // hiện lần lượt, đóng cái này mới hiện cái kế (xem closeModal)
+  const CELEBRATION_MODALS = ['gift-modal', 'level-up-modal', 'reward-modal'];
+  const celebrationQueue = [];
+  const showCelebration = (id, setup) => {
+    const busy = CELEBRATION_MODALS.some(m => document.getElementById(m).classList.contains('open'));
+    if (busy) {
+      celebrationQueue.push({ id, setup });
+      return;
+    }
+    setup();
+    document.getElementById(id).classList.add('open');
+  };
+
   // --- LEVEL UP MODAL CELEBRATION ---
   window.showLevelUpModal = (newLevel, bonusCoins) => {
-    const modal = document.getElementById('level-up-modal');
-    document.getElementById('level-up-num').textContent = newLevel;
-    document.getElementById('level-up-bonus-coins').textContent = bonusCoins;
-    modal.classList.add('open');
-    
-    // Confetti / sparkles burst
-    for (let i = 0; i < 20; i++) {
-      renderer.spawnParticle('sparkle', renderer.x + (Math.random() - 0.5) * 160, renderer.y - 60, {
-        text: ['✨', '⭐', '🎉', '🌟'][Math.floor(Math.random() * 4)],
-        size: 24,
-        vy: -80 - Math.random() * 80
-      });
-    }
+    // Hoãn một nhịp để hộp thoại của hành động gây ra lên cấp (ví dụ mở hộp quà) hiện trước
+    setTimeout(() => showCelebration('level-up-modal', () => {
+      document.getElementById('level-up-num').textContent = newLevel;
+      document.getElementById('level-up-bonus-coins').textContent = bonusCoins;
+
+      // Confetti / sparkles burst
+      for (let i = 0; i < 20; i++) {
+        renderer.spawnParticle('sparkle', renderer.x + (Math.random() - 0.5) * 160, renderer.y - 60, {
+          text: ['✨', '⭐', '🎉', '🌟'][Math.floor(Math.random() * 4)],
+          size: 24,
+          vy: -80 - Math.random() * 80
+        });
+      }
+    }), 0);
   };
 
   // --- OFFLINE GIFTS MODAL ---
@@ -65,21 +81,172 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const showGiftModal = (awaySeconds) => {
-    const gifts = state.data.pendingGifts;
-    if (!gifts.length) return;
-    document.getElementById('gift-away-text').textContent =
-      awaySeconds ? `Bạn vắng mặt ${formatAway(awaySeconds)}` : 'Bạn vừa quay lại';
-    const list = document.getElementById('gift-list');
-    list.innerHTML = '';
-    gifts.forEach(g => {
-      const item = document.createElement('div');
-      item.className = 'gift-item';
-      item.innerHTML = `<span class="gift-icon">${g.icon}</span><span>${g.label}</span>` +
-        `<span class="gift-amount">${g.type === 'coins' ? `+${g.amount} xu` : `x${g.amount}`}</span>`;
-      list.appendChild(item);
+    if (!state.data.pendingGifts.length) return;
+    if (document.getElementById('gift-modal').classList.contains('open')) return;
+    showCelebration('gift-modal', () => {
+      const gifts = state.data.pendingGifts;
+      document.getElementById('gift-away-text').textContent =
+        awaySeconds ? `Bạn vắng mặt ${formatAway(awaySeconds)}` : 'Bạn vừa quay lại';
+      const list = document.getElementById('gift-list');
+      list.innerHTML = '';
+      gifts.forEach(g => {
+        const item = document.createElement('div');
+        item.className = 'gift-item';
+        item.innerHTML = `<span class="gift-icon">${g.icon}</span><span>${g.label}</span>` +
+          `<span class="gift-amount">${g.type === 'coins' ? `+${g.amount} xu` : `x${g.amount}`}</span>`;
+        list.appendChild(item);
+      });
     });
-    document.getElementById('gift-modal').classList.add('open');
   };
+
+  // --- HỘP THOẠI PHẦN THƯỞNG CHUNG (hộp quà ngày, mốc chuỗi) ---
+  const showRewardModal = ({ title, subtitle, items }) => {
+    showCelebration('reward-modal', () => {
+      document.getElementById('reward-title').textContent = title;
+      document.getElementById('reward-subtitle').textContent = subtitle || '';
+      const list = document.getElementById('reward-list');
+      list.innerHTML = '';
+      items.forEach(it => {
+        const item = document.createElement('div');
+        item.className = 'gift-item';
+        item.innerHTML = `<span class="gift-icon">${it.icon}</span><span></span><span class="gift-amount"></span>`;
+        item.children[1].textContent = it.label;
+        item.children[2].textContent = it.amount;
+        list.appendChild(item);
+      });
+    });
+  };
+
+  // Xu bay từ nút nhận về ví (phản hồi khi nhận thưởng)
+  const flyCoins = (fromEl, count = 5) => {
+    const target = document.getElementById('pet-coins-badge');
+    if (!fromEl || !target) return;
+    const from = fromEl.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    for (let i = 0; i < count; i++) {
+      const coin = document.createElement('div');
+      coin.className = 'flying-coin';
+      coin.textContent = '🪙';
+      coin.style.left = `${from.left + from.width / 2}px`;
+      coin.style.top = `${from.top + from.height / 2}px`;
+      document.body.appendChild(coin);
+      setTimeout(() => {
+        coin.style.transform = `translate(${to.left + to.width / 2 - (from.left + from.width / 2)}px, ${to.top + to.height / 2 - (from.top + from.height / 2)}px) scale(0.6)`;
+        coin.style.opacity = '0.2';
+      }, 30 + i * 70);
+      setTimeout(() => coin.remove(), 900 + i * 70);
+    }
+  };
+
+  const formatCountdown = (ms) => {
+    const minutes = Math.max(1, Math.ceil(ms / 60000));
+    const hours = Math.floor(minutes / 60);
+    return hours ? `${hours} giờ ${minutes % 60} phút` : `${minutes} phút`;
+  };
+
+  // --- BẢNG NHIỆM VỤ NGÀY ---
+  // Chỉ dựng lại khi dữ liệu nhiệm vụ/chuỗi đổi, để nút không bị thay giữa lúc đang bấm
+  let questsRenderKey = '';
+  const renderQuests = (data) => {
+    document.getElementById('quest-reset').textContent = `Làm mới sau ${formatCountdown(state.msUntilReset())}`;
+    const streak = state.getStreakView();
+    const key = JSON.stringify([data.quests, streak]);
+    if (key === questsRenderKey) return;
+    questsRenderKey = key;
+
+    const streakEl = document.getElementById('quest-streak');
+    streakEl.textContent = `🔥 ${streak.count}${streak.freezes ? ` ❄️${streak.freezes}` : ''}`;
+    streakEl.classList.toggle('inactive', !streak.activeToday);
+    streakEl.title = `Chuỗi ngày chăm mèo: ${streak.count} ngày (kỷ lục ${streak.best}). ` +
+      (streak.activeToday ? 'Hôm nay đã giữ chuỗi ✓' : 'Nhận 1 nhiệm vụ hôm nay để giữ chuỗi') +
+      `. Vé đóng băng ❄️: ${streak.freezes} (tự dùng khi lỡ một ngày)`;
+
+    const quests = data.quests;
+    const list = document.getElementById('daily-quests-list');
+    list.innerHTML = '';
+    quests.list.forEach((q, i) => {
+      const li = document.createElement('li');
+      li.className = `quest-item${q.done ? ' done' : ''}${q.claimed ? ' claimed' : ''}`;
+      const percent = Math.round((q.current / q.target) * 100);
+      let action = '';
+      if (q.claimed) {
+        action = '<span class="quest-claimed" title="Đã nhận">✓</span>';
+      } else if (q.done) {
+        action = `<button class="quest-btn" data-action="claim" data-index="${i}">Nhận</button>`;
+      } else if (quests.rerolls > 0) {
+        action = `<button class="quest-reroll" data-action="reroll" data-index="${i}" title="Đổi nhiệm vụ khác (còn ${quests.rerolls} lượt hôm nay)">🔄</button>`;
+      }
+      li.innerHTML = `
+        <span class="quest-icon">${q.icon}</span>
+        <div class="quest-body">
+          <div class="quest-text"></div>
+          <div class="quest-progress"><div class="quest-progress-fill" style="width: ${percent}%"></div></div>
+          <div class="quest-meta">
+            <span>${q.current}/${q.target}</span>
+            <span class="quest-reward">🪙${q.coins} ⭐${q.exp}</span>
+          </div>
+        </div>
+        ${action}
+      `;
+      li.querySelector('.quest-text').textContent = q.text;
+      list.appendChild(li);
+    });
+
+    // Hộp quà ngày: tiến độ ●●○ và nút mở khi đã nhận đủ
+    const claimedCount = quests.list.filter(q => q.claimed).length;
+    const dots = quests.list.map(q => (q.claimed ? '●' : '○')).join('');
+    const chest = document.getElementById('quest-chest');
+    if (quests.chestClaimed) {
+      chest.innerHTML = '<span class="chest-label">🎁 Đã mở hộp quà hôm nay ✓</span>';
+    } else if (state.isDailyChestReady()) {
+      chest.innerHTML = '<button class="quest-chest-btn" data-action="chest">🎁 Mở hộp quà ngày</button>';
+    } else {
+      chest.innerHTML = `<span class="chest-label">🎁 Hộp quà ngày <span class="chest-dots">${dots}</span> ${claimedCount}/${quests.list.length}</span>`;
+    }
+  };
+
+  document.getElementById('quests-card').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const index = Number(btn.dataset.index);
+
+    if (btn.dataset.action === 'claim') {
+      const result = state.claimQuest(index);
+      if (!result) return;
+      flyCoins(btn, 5);
+      window.showToast(`🎉 Nhận <b>+${result.quest.coins} xu, +${result.quest.exp} EXP</b> từ "${result.quest.text}"`);
+      const s = result.streak;
+      if (s) {
+        if (s.usedFreezes) window.showToast(`❄️ Đã dùng ${s.usedFreezes} vé đóng băng để giữ chuỗi!`);
+        if (s.milestone) {
+          showRewardModal({
+            title: `🔥 Chuỗi ${s.count} ngày!`,
+            subtitle: 'Cảm ơn sen đã chăm bé mèo đều đặn ~',
+            items: [
+              { icon: '🪙', label: 'Xu', amount: `+${s.milestone.coins}` },
+              { icon: '⭐', label: 'EXP', amount: `+${s.milestone.exp}` }
+            ]
+          });
+        } else {
+          window.showToast(`🔥 Chuỗi chăm mèo: <b>${s.count} ngày</b>${s.freezeEarned ? ' · nhận 1 vé đóng băng ❄️' : ''}`);
+        }
+      }
+      if (window.officeNetwork) {
+        window.officeNetwork.broadcastAction('quest', `vừa hoàn thành nhiệm vụ "${result.quest.text}" 🎯`, '🎯', '#22c55e');
+      }
+    } else if (btn.dataset.action === 'reroll') {
+      if (state.rerollQuest(index)) window.showToast('🔄 Đã đổi sang nhiệm vụ khác!');
+    } else if (btn.dataset.action === 'chest') {
+      const chest = state.claimDailyChest();
+      if (!chest) return;
+      flyCoins(btn, 8);
+      showRewardModal({
+        title: '🎁 Hộp quà ngày',
+        subtitle: 'Xong hết nhiệm vụ hôm nay, giỏi quá sen ơi!',
+        items: chest.rewards
+      });
+    }
+  });
 
   // --- RENDER HUD UPDATES ---
   const updateHUD = (data) => {
@@ -106,19 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('vital-energy-val').textContent = `${Math.round(v.energy)}/100`;
 
     // 3. Daily Quests
-    const questsList = document.getElementById('daily-quests-list');
-    questsList.innerHTML = '';
-    data.dailyQuests.forEach(q => {
-      const li = document.createElement('li');
-      li.className = `quest-item ${q.done ? 'checked' : ''}`;
-      li.innerHTML = `
-        <div class="quest-checkbox ${q.done ? 'checked' : ''}">
-          ${q.done ? '✓' : ''}
-        </div>
-        <span>${q.text}</span>
-      `;
-      questsList.appendChild(li);
-    });
+    renderQuests(data);
 
     // 4. Current Action Card
     document.getElementById('action-card-title').textContent = data.currentAction.title;
@@ -371,6 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         slot.addEventListener('click', () => {
           d.customization.roomTheme = dec.id;
           applyRoomTheme(dec.id);
+          if (!isCurrent) state.trackQuest('room');
           state.notify();
           window.showToast(`🌅 Đã đổi không gian phòng sang: <b>${dec.name}</b>!`);
           if (window.officeNetwork) {
@@ -609,7 +765,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function closeModal(modal) {
-    if (modal) modal.classList.remove('open');
+    if (!modal) return;
+    modal.classList.remove('open');
+    // Hiện hộp thoại chúc mừng đang chờ (nếu có)
+    if (CELEBRATION_MODALS.includes(modal.id) && celebrationQueue.length) {
+      const next = celebrationQueue.shift();
+      setTimeout(() => showCelebration(next.id, next.setup), 250);
+    }
   }
 
   document.querySelectorAll('.btn-close-modal').forEach(btn => {
@@ -798,7 +960,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const resumeFromAway = () => {
     const result = state.applyOfflineProgress();
     showGiftModal(result ? result.awaySeconds : null);
+    checkNewDay();
   };
+
+  // Qua 0:00 thì có nhiệm vụ mới (kiểm tra định kỳ và khi quay lại tab)
+  function checkNewDay() {
+    if (state.ensureToday()) {
+      state.notify();
+      window.showToast('☀️ Ngày mới rồi! Bé mèo có <b>nhiệm vụ mới</b> cho sen đó');
+    }
+  }
 
   document.getElementById('btn-claim-gifts').addEventListener('click', () => {
     const claimed = state.claimGifts();
@@ -820,6 +991,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Keep lastSeen fresh while the tab is open so a crash does not look like a long absence.
   setInterval(() => {
     if (document.visibilityState === 'visible') state.save();
+    checkNewDay();
+    renderQuests(state.data); // cập nhật đồng hồ "Làm mới sau"
   }, 15000);
 
   resumeFromAway();

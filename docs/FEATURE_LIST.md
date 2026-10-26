@@ -26,7 +26,7 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | CORE | Lõi game (vòng lặp, lưu/nạp, state) | 5 | 5 | 0 | 0 | 0 |
 | PET | Thú cưng (chỉ số, hành vi, AI) | 17 | 17 | 0 | 0 | 0 |
 | ACT | Tương tác người chơi | 11 | 10 | 1 | 0 | 0 |
-| ECO | Kinh tế & tiến trình | 8 | 6 | 2 | 0 | 0 |
+| ECO | Kinh tế & tiến trình | 12 | 11 | 1 | 0 | 0 |
 | OFF | Tiến trình offline & quà | 4 | 0 | 0 | 4 | 0 |
 | CUS | Tuỳ biến (lông, phụ kiện, phòng) | 5 | 5 | 0 | 0 | 0 |
 | REN | Đồ hoạ Canvas 2D | 13 | 12 | 1 | 0 | 0 |
@@ -34,7 +34,7 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | UI | Giao diện người dùng | 8 | 8 | 0 | 0 | 0 |
 | NET | Nhiều người trong văn phòng | 9 | 8 | 1 | 0 | 0 |
 | NFR | Phi chức năng | 6 | 2 | 4 | 0 | 0 |
-| BKL | Backlog đề xuất | 10 | 1 | 0 | 0 | 9 |
+| BKL | Backlog đề xuất | 10 | 2 | 0 | 0 | 8 |
 
 ---
 
@@ -94,10 +94,14 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | ECO-02 | EXP và lên cấp | EXP cần = `level × 100 × 1.15`; thưởng `level × 50` xu và hộp thoại chúc mừng | M | ✅ Done | FN-GS-21, FN-GS-22, FN-APP-04 | |
 | ECO-03 | Cửa hàng | Mua đồ ăn, đồ chơi, trang phục bằng xu | M | ✅ Done | FN-GS-26, FN-APP-20 | 15 mặt hàng |
 | ECO-04 | Kho đồ | Số lượng đồ ăn, danh sách đồ chơi và trang phục đã sở hữu | M | ✅ Done | FN-APP-08 | |
-| ECO-05 | Nhiệm vụ hằng ngày | 4 nhiệm vụ: cho ăn, chơi, vuốt ve, ngủ đủ giấc; có thưởng xu + EXP | S | 🟡 Partial | FN-GS-24 | **Không reset theo ngày** — làm xong là xong vĩnh viễn (xem BKL-01) |
+| ECO-05 | Nhiệm vụ hằng ngày | Mỗi ngày (đổi lúc 0:00 giờ máy) bốc 3 nhiệm vụ từ kho 10 loại: 1 dễ, 1 vừa, 1 ngẫu nhiên (50% khó). Thanh tiến độ x/y, chip thưởng 🪙⭐, bấm "Nhận" để lấy thưởng (xu bay về ví, mèo chào), đồng hồ "Làm mới sau" | M | ✅ Done | FN-GS-30..36, FN-APP-35, FN-APP-36 | Làm lại 2026-10-26, xem [GAMIFICATION.md](GAMIFICATION.md) |
 | ECO-06 | Thành tựu | 5 danh hiệu, mỗi cái +50 xu +40 EXP | S | 🟡 Partial | FN-GS-25, FN-APP-22 | `laser_chaser` không có đường nào mở khoá |
 | ECO-07 | Sổ sưu tập | Modal liệt kê thành tựu, đã/chưa đạt | C | ✅ Done | FN-APP-22 | `foodsDiscovered`, `toysUsed` được ghi nhưng chưa hiển thị |
 | ECO-08 | Vật phẩm đặc biệt | Snack Cỏ Mèo (gây Zoomies), Nước Tăng Lực (hồi đầy 3 chỉ số) | C | ✅ Done | FN-APP-08 | Nước Tăng Lực miễn phí, vô hạn (xem BKL-06) |
+| ECO-09 | Đổi nhiệm vụ | 1 lượt/ngày đổi một nhiệm vụ chưa xong, ưu tiên cùng mức khó | S | ✅ Done | FN-GS-34 | Hỗ trợ tự chủ (SDT) |
+| ECO-10 | Hộp quà ngày | Nhận đủ 3 nhiệm vụ → mở hộp: 40–80 xu + 20 EXP, 35% kèm món ăn, 10% kèm trang phục chưa có (đủ rồi thì +60 xu) | S | ✅ Done | FN-GS-35, FN-GS-36, FN-APP-36 | Thưởng có trần, có chút bất ngờ |
+| ECO-11 | Chuỗi ngày chăm mèo 🔥 | Ngày được tính khi nhận ≥ 1 nhiệm vụ; lỡ ngày tự dùng vé đóng băng ❄️ (tối đa 2, nhận 1 vé mỗi 7 ngày); hết vé thì về 1, giữ kỷ lục; mốc 3/7/14/30 ngày thưởng 50/120/250/500 xu | S | ✅ Done | FN-GS-37, FN-GS-38 | Chuỗi "nhân hậu", không phạt mèo |
+| ECO-12 | Hộp thoại chúc mừng xếp hàng | Quà offline, lên cấp, phần thưởng không mở chồng nhau; phần thưởng hiện trước, lên cấp sau | S | ✅ Done | FN-APP-37, FN-APP-24 | |
 
 ## 5. OFF — Tiến trình offline & quà (nhánh `feat/offline-progress`)
 
@@ -157,7 +161,7 @@ Danh sách tính năng theo chuẩn tài liệu phát triển game: phân rã th
 | UI-05 | Điều hướng trên phải | Phòng, Trang phục, Bộ sưu tập, Cài đặt | S | ✅ Done | FN-APP-16..19 | |
 | UI-06 | Hệ modal | Cửa hàng, Tủ đồ, Sưu tập, Cài đặt, Lên cấp, Quà | M | ✅ Done | FN-APP-20..24 | |
 | UI-07 | Toast | Thông báo ngắn trên đầu, tự tắt sau 2.8 giây | S | ✅ Done | FN-APP-03 | |
-| UI-08 | Bảng nhiệm vụ dạng giấy da | Danh sách nhiệm vụ có ô tích | C | ✅ Done | FN-APP-07 | |
+| UI-08 | Bảng nhiệm vụ | Chuỗi 🔥 + vé ❄️ (di chuột xem chi tiết), đồng hồ làm mới, 3 nhiệm vụ có thanh tiến độ và chip thưởng, nút Nhận nhún nhẹ khi xong, nút đổi 🔄, chân bảng là hộp quà ngày ●●○ | C | ✅ Done | FN-APP-35 | |
 
 ## 10. NET — Nhiều người trong văn phòng
 
@@ -192,7 +196,7 @@ Các hạng mục rút ra từ phân tích mã nguồn và nghiên cứu game th
 
 | ID | Hạng mục | Mô tả | Ưu tiên | Trạng thái | Liên quan |
 |---|---|---|---|---|---|
-| BKL-01 | Reset nhiệm vụ theo ngày | Lưu ngày hiện tại, sang ngày mới thì đặt lại tiến độ nhiệm vụ; bỏ tiến độ dở dang trong dữ liệu mặc định | M | ⬜ Planned | ECO-05 |
+| BKL-01 | Reset nhiệm vụ theo ngày | Lưu ngày hiện tại, sang ngày mới thì đặt lại tiến độ nhiệm vụ; bỏ tiến độ dở dang trong dữ liệu mặc định | M | ✅ Done (2026-10-26) | ECO-05 |
 | BKL-02 | Sửa XSS ở thông báo hành động | Escape `detail` (hoặc server chỉ nhận mã hành động rồi tự dựng câu); escape tên mèo/biệt danh trong toast | M | ⬜ Planned | NFR-03, NET-06 |
 | BKL-03 | Danh sách cho phép file tĩnh | Chỉ phục vụ `index.html`, `*.css`, `*.js` frontend và `assets/`; chặn `.git`, `server.js`, `package*.json` | M | ⬜ Planned | NFR-04, NET-01 |
 | BKL-04 | Kích hoạt `SULKING` | Mèo dỗi khi bị bỏ rơi lâu hoặc đói kéo dài (liên hệ với quà offline) | C | ✅ Done (2026-10-26) | PET-03 |

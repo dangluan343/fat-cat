@@ -362,6 +362,8 @@ class CatRenderer {
           if (window.gameState && window.gameState.behaviorState === 'IDLE') {
             window.gameState.setBehavior('CURIOUS', 2.8);
           }
+          // Nhiệm vụ ngày "Đá bóng len" (lab dùng gameState giả nên có thể không có hàm này)
+          if (window.gameState && window.gameState.trackQuest) window.gameState.trackQuest('yarn');
           this.spawnParticle('sparkle', this.yarnBall.x, this.yarnBall.y, { text: '✨', size: 24 });
         }
       }
