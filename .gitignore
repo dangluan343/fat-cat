@@ -1,4 +1,7 @@
 node_modules/
+# Cat Lab + bản nháp animation: công cụ chỉ dùng trên máy local, không đưa lên repo
+# (xem CLAUDE.md, "Quy trình animation")
+tools/
 .DS_Store
 Thumbs.db
 *.log

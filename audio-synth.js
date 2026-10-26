@@ -332,6 +332,35 @@ class CatAudioEngine {
     osc.stop(now + 0.14);
   }
 
+  // Hiss: high-passed white noise burst, fast attack and slow fade
+  hiss() {
+    if (this.isMuted) return;
+    this.init();
+    const now = this.ctx.currentTime;
+    const duration = 0.7;
+    const buffer = this.ctx.createBuffer(1, Math.floor(this.ctx.sampleRate * duration), this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+    const highpass = this.ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.setValueAtTime(2500, now);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(highpass);
+    highpass.connect(gain);
+    gain.connect(this.ctx.destination);
+    noise.start(now);
+    noise.stop(now + duration);
+  }
+
   // Cozy procedural Lo-fi chord BGM (warm Rhodes chords)
   toggleBGM() {
     if (this.bgmPlaying) {

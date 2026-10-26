@@ -2,10 +2,59 @@
  * Meow 2D - Game State, Autonomous AI & Progression System
  */
 
+// Offline progress tuning. Vitals while away decay slower than online and stop
+// at floors (hunger floor stays above the starvation penalty threshold of 25).
+const OFFLINE_CONFIG = {
+  MIN_AWAY_SECONDS: 120,        // shorter absences are ignored
+  MAX_AWAY_SECONDS: 8 * 3600,   // time beyond this is not counted
+  HUNGER_PER_SEC: 0.006,        // ~22 pts/hour
+  MAX_HUNGER_DROP: 50,
+  HUNGER_FLOOR: 25,
+  HAPPY_PER_SEC: 0.002,         // ~7 pts/hour
+  MAX_HAPPY_DROP: 20,
+  HAPPY_FLOOR: 40,
+  ENERGY_GAIN_PER_SEC: 0.01,    // the cat naps while you are away
+  MAX_ENERGY_GAIN: 50,
+  GIFT_INTERVAL_SECONDS: 1800,  // one gift per 30 min away
+  MAX_GIFTS: 6
+};
+
+// Vuốt liên tục quá lâu làm mèo bị kích thích quá mức và cáu (petting-induced aggression)
+const PET_OVERLOAD = {
+  WINDOW_MS: 10000,   // cửa sổ đếm
+  MAX_PETS: 32,       // số lần vuốt trong cửa sổ thì cáu (~8-9 giây rê chuột liên tục)
+  ANNOYED_SECONDS: 3.5
+};
+
+// Người chơi nháy mắt chậm với mèo: hồi chiêu để không spam lấy EXP
+const SLOW_BLINK_COOLDOWN_MS = 8000;
+
+// Ngưỡng biểu cảm theo chỉ số (docs/CAT_ANIMATION.md, nhóm P1)
+const VITAL_MOODS = {
+  SICK_HEALTH: 30,       // sức khoẻ dưới mức này thì thỉnh thoảng ốm
+  STARVING_HUNGER: 10,   // đói dưới mức này thì đói lả (thay cho xin ăn)
+  EXHAUSTED_ENERGY: 15,  // năng lượng dưới mức này thì từ chối chơi, gật gù
+  FULL_HUNGER: 95,       // từ mức này mèo từ chối ăn thêm; ăn lên tới mức này thì no căng
+  HISS_AFTER_PETS: 6     // vẫn bị vuốt ngần này lần trong lúc cáu thì rít (~1.5 giây rê chuột)
+};
+
+// Trạng thái AI tự trị không được ngắt giữa chừng
+const UNINTERRUPTIBLE_STATES = ['PETTING', 'PLAYING', 'EATING', 'ANNOYED', 'HISS', 'SURPRISED', 'GREETING', 'FULL'];
+
+const GIFT_FOODS = {
+  kibble: 'Thức ăn hạt',
+  dried_fish: 'Cá khô giòn',
+  milk: 'Sữa tươi',
+  pate: 'Pate thơm ngon',
+  salmon: 'Cá hồi',
+  catnip_snack: 'Snack Cỏ Mèo'
+};
+
 class CatGameState {
   constructor() {
     this.STORAGE_KEY = 'meow_2d_save_data_v1';
-    
+    this.awayFrom = null; // timestamp (ms) the player left, consumed by applyOfflineProgress()
+
     // Default initial data
     this.data = {
       name: 'Bé Mập',
@@ -69,12 +118,23 @@ class CatGameState {
         timesFed: 1,
         timesPlayed: 2,
         sleepSeconds: 0
-      }
+      },
+
+      lastSeen: Date.now(),  // last time the player was present (ms)
+      pendingGifts: []       // gifts the cat left while away, not yet claimed
     };
 
     // Autonomous behavior state
-    this.behaviorState = 'IDLE'; // 'IDLE', 'PETTING', 'SLEEPING', 'YAWNING', 'LICKING_PAW', 'ROLLING', 'BEGGING', 'EATING', 'PLAYING', 'ZOOMIES', 'SULKING'
+    // 'IDLE', 'PETTING', 'SLEEPING', 'YAWNING', 'LICKING_PAW', 'ROLLING', 'BEGGING', 'EATING', 'PLAYING', 'ZOOMIES', 'SULKING',
+    // 'SLOW_BLINK', 'CURIOUS', 'SURPRISED', 'ANNOYED', 'KNEADING', 'BLEP', 'GREETING', 'GROOMING',
+    // 'SICK', 'EXHAUSTED', 'STARVING', 'FULL', 'HISS'
+    // Hình dạng từng trạng thái: CAT_EXPRESSIONS trong cat-renderer.js
+    this.behaviorState = 'IDLE';
     this.stateTimer = 0;
+    this.petTimes = [];        // mốc thời gian các lần vuốt gần đây (phát hiện vuốt quá lâu)
+    this.annoyedPets = 0;      // số lần bị vuốt tiếp trong lúc đang cáu
+    this.nextBehavior = null;  // trạng thái nối tiếp khi trạng thái hiện tại hết giờ (ví dụ ăn xong → no căng)
+    this.lastSlowBlinkAt = 0;
     this.nextAutonomousActionTimer = 8; // seconds
 
     this.listeners = [];
@@ -91,6 +151,8 @@ class CatGameState {
   }
 
   save() {
+    // A hidden tab is "away": keep lastSeen at the moment the player left.
+    if (document.visibilityState !== 'hidden') this.data.lastSeen = Date.now();
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
     } catch (e) {
@@ -104,6 +166,8 @@ class CatGameState {
       if (saved) {
         const parsed = JSON.parse(saved);
         this.data = { ...this.data, ...parsed };
+        // Saves from before offline progress have no lastSeen: treat as just seen.
+        if (typeof parsed.lastSeen === 'number') this.awayFrom = parsed.lastSeen;
       }
     } catch (e) {
       console.warn('Could not load from localStorage', e);
@@ -113,6 +177,77 @@ class CatGameState {
   resetData() {
     localStorage.removeItem(this.STORAGE_KEY);
     location.reload();
+  }
+
+  // --- OFFLINE PROGRESS ---
+  // Call when the player leaves (tab hidden) so the away time starts there.
+  markAway() {
+    this.data.lastSeen = Date.now();
+    this.awayFrom = this.data.lastSeen;
+    this.save();
+  }
+
+  // Applies capped vitals decay for the time since awayFrom and queues the gifts
+  // the cat left. Returns { awaySeconds, gifts } or null if the absence was too short.
+  applyOfflineProgress() {
+    const cfg = OFFLINE_CONFIG;
+    const now = Date.now();
+    const awayFrom = this.awayFrom;
+    this.awayFrom = null;
+    this.data.lastSeen = now;
+
+    // Missing timestamp or clock moved backwards: nothing to apply.
+    if (awayFrom === null || now <= awayFrom) return null;
+    const rawSeconds = (now - awayFrom) / 1000;
+    if (rawSeconds < cfg.MIN_AWAY_SECONDS) return null;
+
+    const seconds = Math.min(rawSeconds, cfg.MAX_AWAY_SECONDS);
+    const v = this.data.vitals;
+
+    // Never push a stat below its floor, and never raise one that is already below it.
+    const decay = (value, perSec, maxDrop, floor) =>
+      Math.min(value, Math.max(floor, value - Math.min(seconds * perSec, maxDrop)));
+    v.hunger = decay(v.hunger, cfg.HUNGER_PER_SEC, cfg.MAX_HUNGER_DROP, cfg.HUNGER_FLOOR);
+    v.happiness = decay(v.happiness, cfg.HAPPY_PER_SEC, cfg.MAX_HAPPY_DROP, cfg.HAPPY_FLOOR);
+    v.energy = Math.min(100, v.energy + Math.min(seconds * cfg.ENERGY_GAIN_PER_SEC, cfg.MAX_ENERGY_GAIN));
+
+    const giftCount = Math.min(cfg.MAX_GIFTS, Math.floor(seconds / cfg.GIFT_INTERVAL_SECONDS));
+    const gifts = [];
+    for (let i = 0; i < giftCount; i++) gifts.push(this.rollGift());
+    // Cap the unclaimed pile so ignoring the modal for days does not grow the save forever.
+    this.data.pendingGifts = this.data.pendingGifts.concat(gifts).slice(-cfg.MAX_GIFTS * 2);
+
+    this.setBehavior('GREETING', 3.5);
+    return { awaySeconds: rawSeconds, gifts };
+  }
+
+  rollGift() {
+    const r = Math.random();
+    if (r < 0.6) {
+      return { type: 'coins', icon: '🐟', label: 'Cá nhỏ', amount: 10 + Math.floor(Math.random() * 16) };
+    }
+    const pick = (ids) => ids[Math.floor(Math.random() * ids.length)];
+    const id = r < 0.9 ? pick(['kibble', 'dried_fish', 'milk', 'pate']) : pick(['salmon', 'catnip_snack']);
+    return { type: 'food', id, icon: '🎁', label: GIFT_FOODS[id], amount: 1 };
+  }
+
+  claimGifts() {
+    const gifts = this.data.pendingGifts;
+    if (!gifts.length) return null;
+
+    let coins = 0;
+    gifts.forEach(g => {
+      if (g.type === 'coins') {
+        coins += g.amount;
+      } else if (g.type === 'food' && GIFT_FOODS[g.id]) {
+        this.data.inventory[g.id] = (this.data.inventory[g.id] || 0) + g.amount;
+      }
+    });
+    const claimed = gifts.length;
+    this.data.pendingGifts = [];
+    if (coins > 0) this.addCoins(coins);
+    this.addExp(claimed * 5);
+    return { count: claimed, coins };
   }
 
   // --- STATS & VITAL MANAGEMENT ---
@@ -154,6 +289,7 @@ class CatGameState {
   setBehavior(state, duration = 4) {
     this.behaviorState = state;
     this.stateTimer = duration;
+    this.nextBehavior = null; // đổi trạng thái thì bỏ trạng thái nối tiếp cũ
     
     // Update action UI banner to match
     switch (state) {
@@ -188,6 +324,45 @@ class CatGameState {
       case 'PLAYING':
         this.setAction('Đang chơi đùa', 'Vồ bắt hăng say, rèn luyện phản xạ! 🪶');
         break;
+      case 'SLOW_BLINK':
+        this.setAction('Đang nháy mắt chậm', 'Mèo nói "mình tin bạn" bằng ánh mắt 😌');
+        break;
+      case 'CURIOUS':
+        this.setAction('Đang tò mò', 'Nghiêng đầu ngó nghiêng... cái gì thế? ❓');
+        break;
+      case 'SURPRISED':
+        this.setAction('Giật mình!', 'Ối! Ai vừa đánh thức mèo đấy? ❗');
+        break;
+      case 'ANNOYED':
+        this.setAction('Đang cáu nhẹ', 'Vuốt nhiều quá rồi, cho mèo nghỉ chút 💢');
+        break;
+      case 'KNEADING':
+        this.setAction('Đang nhồi bột', 'Nhào nhào bàn chân, rù rù mãn nguyện 🍞');
+        break;
+      case 'BLEP':
+        this.setAction('Đang thè lưỡi', 'Quên thụt lưỡi vào... blep 😛');
+        break;
+      case 'GREETING':
+        this.setAction('Chào mừng bạn về!', 'Dựng đuôi kêu rừ rừ đón sen 💛');
+        break;
+      case 'GROOMING':
+        this.setAction('Đang rửa mặt', 'Liếm chân rồi xoa mặt sạch sẽ 🧼');
+        break;
+      case 'SICK':
+        this.setAction('Đang ốm', 'Run run, mệt mỏi... cho mèo ăn uống đầy đủ nhé 🤒');
+        break;
+      case 'EXHAUSTED':
+        this.setAction('Kiệt sức', 'Mắt díp lại, gật gù... cho mèo đi ngủ thôi 😪');
+        break;
+      case 'STARVING':
+        this.setAction('Đói lả', 'Nằm bẹp, kêu yếu ớt... sen ơi cho ăn với 😿');
+        break;
+      case 'FULL':
+        this.setAction('No căng bụng', 'Liếm mép thoả mãn, bụng tròn vo 😋');
+        break;
+      case 'HISS':
+        this.setAction('Đang rít', 'Khè! Đã bảo dừng tay rồi mà 😾');
+        break;
       default:
         this.setAction('Đang thư giãn', 'Lim dim ngắm cảnh bên khung cửa sổ ~');
         break;
@@ -199,9 +374,14 @@ class CatGameState {
     if (this.stateTimer > 0) {
       this.stateTimer -= delta;
       if (this.stateTimer <= 0) {
-        // Return to natural idle if temporary state finished
+        // Return to natural idle (or the chained state) if temporary state finished
         if (this.behaviorState !== 'SLEEPING' && this.behaviorState !== 'PLAYING') {
-          this.setBehavior('IDLE', 0);
+          const next = this.nextBehavior;
+          if (next) {
+            this.setBehavior(next.state, next.duration);
+          } else {
+            this.setBehavior('IDLE', 0);
+          }
         }
       }
     }
@@ -211,17 +391,34 @@ class CatGameState {
     if (this.nextAutonomousActionTimer <= 0) {
       this.nextAutonomousActionTimer = 8 + Math.random() * 8; // Every 8-16s
 
-      // Don't interrupt playing or manual petting
-      if (this.behaviorState === 'PETTING' || this.behaviorState === 'PLAYING') return;
+      // Don't interrupt playing, petting or short reactions
+      if (UNINTERRUPTIBLE_STATES.includes(this.behaviorState)) return;
 
       // Check urgent vitals
-      if (this.data.vitals.hunger < 35 && this.behaviorState !== 'EATING') {
+      const v = this.data.vitals;
+      if (v.health < VITAL_MOODS.SICK_HEALTH && Math.random() < 0.6) {
+        this.setBehavior('SICK', 8);
+        return;
+      }
+
+      if (v.hunger < VITAL_MOODS.STARVING_HUNGER) {
+        this.setBehavior('STARVING', 8);
+        if (window.catAudio) window.catAudio.meow('hungry');
+        return;
+      }
+
+      if (v.hunger < 35 && this.behaviorState !== 'EATING') {
         this.setBehavior('BEGGING', 5);
         if (window.catAudio) window.catAudio.meow('hungry');
         return;
       }
 
-      if (this.data.vitals.energy < 25 && this.behaviorState !== 'SLEEPING') {
+      if (v.energy < 25 && this.behaviorState !== 'SLEEPING') {
+        // Quá mệt thì đôi khi gật gù cố thức trước khi ngủ
+        if (v.energy < VITAL_MOODS.EXHAUSTED_ENERGY && this.behaviorState !== 'EXHAUSTED' && Math.random() < 0.5) {
+          this.setBehavior('EXHAUSTED', 6);
+          return;
+        }
         this.setBehavior('SLEEPING', 12);
         if (window.catAudio) window.catAudio.yawn();
         return;
@@ -236,11 +433,29 @@ class CatGameState {
         return;
       }
 
-      // Random spontaneous cute actions
-      const choices = ['YAWNING', 'LICKING_PAW', 'ROLLING', 'IDLE', 'IDLE'];
+      // Bị bỏ rơi (vui thấp) thì dỗi
+      if (this.data.vitals.happiness < 30 && this.behaviorState !== 'SULKING' && Math.random() < 0.5) {
+        this.setBehavior('SULKING', 8);
+        return;
+      }
+
+      // Random spontaneous cute actions; mèo vui có thêm nháy mắt chậm và nhồi bột
+      const choices = ['YAWNING', 'LICKING_PAW', 'GROOMING', 'ROLLING', 'CURIOUS', 'BLEP', 'IDLE', 'IDLE'];
+      if (this.data.vitals.happiness > 65) choices.push('SLOW_BLINK', 'KNEADING');
       const pick = choices[Math.floor(Math.random() * choices.length)];
-      
-      if (pick === 'YAWNING') {
+
+      if (pick === 'GROOMING') {
+        this.setBehavior('GROOMING', 4.5);
+      } else if (pick === 'CURIOUS') {
+        this.setBehavior('CURIOUS', 2.8);
+      } else if (pick === 'BLEP') {
+        this.setBehavior('BLEP', 3.5);
+      } else if (pick === 'SLOW_BLINK') {
+        this.setBehavior('SLOW_BLINK', 2.8);
+      } else if (pick === 'KNEADING') {
+        this.setBehavior('KNEADING', 5);
+        if (window.catAudio) window.catAudio.meow('purr-chirp');
+      } else if (pick === 'YAWNING') {
         this.setBehavior('YAWNING', 3.5);
         if (window.catAudio) window.catAudio.yawn();
       } else if (pick === 'LICKING_PAW') {
@@ -257,8 +472,44 @@ class CatGameState {
 
   // --- ACTIONS ---
 
-  // Petting action
-  pet() {
+  // Petting action. Trả về 'ok' | 'annoyed' (đang cáu/rít, không thưởng) | 'hiss' (bị vuốt tiếp khi cáu nên rít)
+  // | 'dozing' (vuốt nhẹ khi ngủ) | 'startled' (bấm khi ngủ làm mèo giật mình)
+  pet(isClick = false) {
+    if (this.behaviorState === 'HISS') return 'annoyed';
+    if (this.behaviorState === 'ANNOYED') {
+      this.annoyedPets++;
+      if (this.annoyedPets >= VITAL_MOODS.HISS_AFTER_PETS) {
+        this.annoyedPets = 0;
+        this.data.vitals.happiness = Math.max(0, this.data.vitals.happiness - 5);
+        this.setBehavior('HISS', 2.5);
+        if (window.catAudio && window.catAudio.hiss) window.catAudio.hiss();
+        return 'hiss';
+      }
+      return 'annoyed';
+    }
+
+    if (this.behaviorState === 'SLEEPING') {
+      if (!isClick) {
+        this.data.vitals.happiness = Math.min(100, this.data.vitals.happiness + 0.4);
+        return 'dozing';
+      }
+      this.setBehavior('SURPRISED', 1.6);
+      if (window.catAudio) window.catAudio.meow('happy');
+      return 'startled';
+    }
+
+    const now = Date.now();
+    this.petTimes = this.petTimes.filter(t => now - t < PET_OVERLOAD.WINDOW_MS);
+    this.petTimes.push(now);
+    if (this.petTimes.length >= PET_OVERLOAD.MAX_PETS) {
+      this.petTimes = [];
+      this.annoyedPets = 0;
+      this.data.vitals.happiness = Math.max(0, this.data.vitals.happiness - 3);
+      this.setBehavior('ANNOYED', PET_OVERLOAD.ANNOYED_SECONDS);
+      if (window.catAudio) window.catAudio.meow('hungry');
+      return 'annoyed';
+    }
+
     this.data.stats.petCount++;
     this.data.vitals.happiness = Math.min(100, this.data.vitals.happiness + 1.2);
     this.data.vitals.health = Math.min(100, this.data.vitals.health + 0.3);
@@ -279,6 +530,20 @@ class CatGameState {
     } else {
       this.stateTimer = 2.5; // prolong petting
     }
+    return 'ok';
+  }
+
+  // Người chơi nháy mắt chậm với mèo, mèo tin tưởng sẽ nháy lại (Humphrey et al. 2020).
+  // Trả về false khi mèo đang ngủ/cáu hoặc còn hồi chiêu.
+  slowBlinkAtCat() {
+    const now = Date.now();
+    if (this.behaviorState === 'SLEEPING' || this.behaviorState === 'ANNOYED') return false;
+    if (now - this.lastSlowBlinkAt < SLOW_BLINK_COOLDOWN_MS) return false;
+    this.lastSlowBlinkAt = now;
+    this.data.vitals.happiness = Math.min(100, this.data.vitals.happiness + 4);
+    this.setBehavior('SLOW_BLINK', 2.8);
+    this.addExp(3);
+    return true;
   }
 
   // Feeding action
@@ -297,6 +562,12 @@ class CatGameState {
 
     if (!this.data.inventory[foodId] || this.data.inventory[foodId] <= 0) {
       return false; // Out of stock
+    }
+
+    // No căng thì từ chối ăn thêm, không trừ kho
+    if (this.isFull()) {
+      this.setBehavior('FULL', 3);
+      return 'full';
     }
 
     this.data.inventory[foodId]--;
@@ -318,6 +589,8 @@ class CatGameState {
 
     this.completeQuestProgress('feed_cat', 1);
     this.setBehavior('EATING', 3.5);
+    // Ăn tới mức no căng thì ăn xong chuyển sang liếm mép, bụng tròn
+    if (this.isFull()) this.nextBehavior = { state: 'FULL', duration: 5 };
 
     // Audio FX
     if (window.catAudio) {
@@ -332,8 +605,16 @@ class CatGameState {
     return true;
   }
 
-  // Play with Toy
+  isFull() {
+    return this.data.vitals.hunger >= VITAL_MOODS.FULL_HUNGER;
+  }
+
+  // Play with Toy. Trả về false khi mèo kiệt sức (không chơi, không thưởng)
   playWithToy(toyId) {
+    if (this.data.vitals.energy < VITAL_MOODS.EXHAUSTED_ENERGY) {
+      this.setBehavior('EXHAUSTED', 5);
+      return false;
+    }
     this.data.activeToy = toyId;
     this.data.stats.timesPlayed++;
     this.data.vitals.happiness = Math.min(100, this.data.vitals.happiness + 20);
@@ -354,6 +635,7 @@ class CatGameState {
     }
 
     this.notify();
+    return true;
   }
 
   stopPlaying() {

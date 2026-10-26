@@ -12,7 +12,134 @@
  * - 9 trạng thái hoạt ảnh độc đáo: Vuốt ve nhào bột, Ngủ say cuộn tròn, Lắc mông săn mồi,
  *   Ngáp duỗi móng, Ăn nhồm nhoàm chóp chép, Lăn ngửa bụng khoe đệm chân hồng (toe beans),
  *   Chắp tay xin ăn (begging), Liếm chân chải chuốt, Phóng Zoomies cuồng nhiệt.
+ * - Biểu cảm và tư thế chạy bằng rig tham số (mắt, mí, đồng tử, tai, râu, đuôi, thân),
+ *   xem docs/CAT_ANIMATION.md.
  */
+
+// Tâm đầu mèo trong hệ toạ độ thân
+const CAT_HEAD = { x: 42, y: -28 };
+
+// Rig biểu cảm & tư thế. Mỗi trạng thái hành vi khai báo "đích" cho các tham số;
+// renderer nội suy giá trị hiện tại về đích mỗi khung hình nên chuyển trạng thái mượt.
+// Ý nghĩa dựa trên ngôn ngữ cơ thể mèo thật (docs/CAT_ANIMATION.md, mục 2-3).
+const RIG_DEFAULTS = {
+  eyeOpen: 1,         // 0 nhắm ... 1 mở ... 1.35 mở to (ngạc nhiên)
+  pupil: 0.45,        // 0.15 khe dọc (cáu) ... 0.9 giãn tròn (hứng thú, giật mình)
+  lidTilt: 0,         // >0 đuôi mí cụp (buồn, nài nỉ), <0 đầu mí cụp (cau có)
+  mouthOpen: 0,       // 0 khép ... 1 há to
+  blush: 0.45,        // độ hồng của má
+  whisker: 0,         // -1 cụp sát má (sợ, cáu) ... +1 chĩa ra trước (tò mò, săn)
+  earRot: 0,          // >0 xoay ngang ra ngoài (tai máy bay), <0 chụm về trước
+  earFlat: 0,         // 0 dựng ... 1 ép sát đầu
+  headTilt: 0,        // radian
+  headDX: 0,
+  headDY: 0,
+  tailRaise: 0.8,     // 0 hạ sát sàn (buồn) ... 1 dựng thẳng (thân thiện)
+  tailPuff: 0,        // 0 bình thường ... 1 xù to (giật mình)
+  tailSwayAmp: 14,    // biên độ vẫy đuôi
+  tailSwaySpeed: 2.2, // tốc độ vẫy (nhanh = quất đuôi khi cáu)
+  bodyLift: 0,        // dịch thân theo chiều dọc (âm = nhảy lên)
+  bodyStretch: 0,     // kéo dài thân (vươn vai, vồ)
+  crouch: 0,          // 0 bình thường ... 1 hạ thấp người rình mồi
+  bodyRock: 0         // lắc lư thân (lăn lộn)
+};
+
+// Kiểu rời rạc (mắt, miệng, chân, đuôi) + đích rig cho từng trạng thái hành vi.
+// eyes: open | happy | closed | squeeze | kawaii
+// mouth: smile | open | meow | yawn | chew | lick | blep | o | pout | flat | grumble | wobble | licklips | hiss
+// paws: tucked | knead | stretch | up | beg | lick | wash   (bat: lúc vồ khi PLAYING)
+// tail: up (dáng theo tailRaise) | curl
+// look: hướng nhìn cố định {x, y} trong [-1, 1], bỏ trống = nhìn theo con trỏ
+const CAT_EXPRESSIONS = {
+  IDLE: { eyes: 'open', mouth: 'smile', paws: 'tucked', tail: 'up' },
+  PETTING: { eyes: 'happy', mouth: 'smile', paws: 'knead', tail: 'up',
+    rig: { blush: 0.85, headTilt: 0.1, whisker: 0.2, earRot: 0.1, tailRaise: 1, tailSwayAmp: 6, tailSwaySpeed: 1.4 } },
+  SLEEPING: { eyes: 'closed', mouth: 'smile', paws: 'tucked', tail: 'curl',
+    rig: { headDY: 10, headTilt: -0.08, earRot: 0.18, earFlat: 0.15, blush: 0.35, whisker: -0.2 } },
+  YAWNING: { eyes: 'squeeze', mouth: 'yawn', paws: 'stretch', tail: 'up',
+    rig: { mouthOpen: 1, headDY: -8, headTilt: -0.14, earRot: 0.3, earFlat: 0.25, bodyStretch: 0.06, whisker: -0.4 } },
+  LICKING_PAW: { eyes: 'closed', mouth: 'lick', paws: 'lick', tail: 'up',
+    rig: { headDY: 6, headTilt: -0.1, tailRaise: 0.6, tailSwayAmp: 5 } },
+  ROLLING: { eyes: 'happy', mouth: 'open', paws: 'up', tail: 'up',
+    rig: { headTilt: 0.25, bodyRock: 1, blush: 0.75, tailRaise: 0.15, tailSwayAmp: 22, tailSwaySpeed: 3 } },
+  BEGGING: { eyes: 'kawaii', mouth: 'meow', paws: 'beg', tail: 'up',
+    rig: { lidTilt: 0.35, headTilt: 0.14, earRot: -0.1, whisker: 0.5, tailRaise: 1 } },
+  EATING: { eyes: 'happy', mouth: 'chew', paws: 'tucked', tail: 'up',
+    rig: { headDY: 12, headDX: -6, headTilt: 0.06, tailRaise: 0.7, tailSwayAmp: 6, blush: 0.6 } },
+  PLAYING: { eyes: 'open', mouth: 'smile', paws: 'tucked', tail: 'up',
+    rig: { pupil: 0.88, earRot: -0.12, whisker: 1, crouch: 0.5, tailRaise: 0.35, tailSwayAmp: 9, tailSwaySpeed: 11 } },
+  ZOOMIES: { eyes: 'open', mouth: 'open', paws: 'tucked', tail: 'up',
+    rig: { eyeOpen: 1.25, pupil: 0.9, earRot: 0.35, earFlat: 0.2, tailPuff: 0.5, tailRaise: 0.9, whisker: -0.3 } },
+  SULKING: { eyes: 'open', mouth: 'pout', paws: 'tucked', tail: 'up', look: { x: -1, y: 0.4 },
+    rig: { eyeOpen: 0.5, lidTilt: 0.55, pupil: 0.35, earRot: 0.4, earFlat: 0.45, headTilt: -0.16, headDX: -6, headDY: 4,
+      blush: 0.15, whisker: -0.5, tailRaise: 0.05, tailSwayAmp: 4, tailSwaySpeed: 1 } },
+  SLOW_BLINK: { eyes: 'open', mouth: 'smile', paws: 'tucked', tail: 'up',
+    rig: { blush: 0.7, headTilt: 0.08, pupil: 0.5, tailRaise: 0.9, tailSwayAmp: 6, tailSwaySpeed: 1.2 } },
+  CURIOUS: { eyes: 'open', mouth: 'o', paws: 'tucked', tail: 'up',
+    rig: { eyeOpen: 1.15, pupil: 0.62, headTilt: 0.3, earRot: -0.18, whisker: 0.85, mouthOpen: 0.1, tailRaise: 0.85, tailSwayAmp: 4, tailSwaySpeed: 6 } },
+  SURPRISED: { eyes: 'open', mouth: 'o', paws: 'tucked', tail: 'up',
+    rig: { eyeOpen: 1.35, pupil: 0.85, earRot: -0.15, whisker: 1, mouthOpen: 0.7, blush: 0.2, tailRaise: 1, tailSwayAmp: 2 } },
+  ANNOYED: { eyes: 'open', mouth: 'grumble', paws: 'tucked', tail: 'up',
+    rig: { eyeOpen: 0.62, lidTilt: -0.9, pupil: 0.16, earRot: 0.62, earFlat: 0.5, whisker: -0.7, blush: 0,
+      headTilt: -0.08, headDY: 3, tailRaise: 0.45, tailSwayAmp: 30, tailSwaySpeed: 9 } },
+  KNEADING: { eyes: 'happy', mouth: 'smile', paws: 'knead', tail: 'up',
+    rig: { blush: 0.8, earRot: 0.12, headTilt: -0.06, tailRaise: 0.85, tailSwayAmp: 5, tailSwaySpeed: 1.2 } },
+  BLEP: { eyes: 'open', mouth: 'blep', paws: 'tucked', tail: 'up',
+    rig: { pupil: 0.55, headTilt: 0.06, blush: 0.55 } },
+  GREETING: { eyes: 'happy', mouth: 'meow', paws: 'tucked', tail: 'up',
+    rig: { blush: 0.75, earRot: -0.1, headTilt: 0.12, whisker: 0.4, tailRaise: 1, tailSwayAmp: 3, tailSwaySpeed: 14 } },
+  GROOMING: { eyes: 'closed', mouth: 'smile', paws: 'wash', tail: 'up',
+    rig: { headTilt: -0.15, headDY: 2, earRot: 0.15, tailRaise: 0.6, tailSwayAmp: 6 } },
+
+  // Nhóm gắn với chỉ số (P1). Cờ phụ: shiver (run), eyeBags (quầng mắt), sickTint (vạch u ám trên trán),
+  // tear (giọt nước mắt), bellyPuff (bụng phình), noseWrinkle (nhăn mũi)
+  SICK: { eyes: 'open', mouth: 'wobble', paws: 'tucked', tail: 'up', shiver: 1.2, eyeBags: true, sickTint: true,
+    rig: { eyeOpen: 0.45, lidTilt: 0.45, pupil: 0.3, blush: 0, whisker: -0.4, earRot: 0.35, earFlat: 0.35,
+      headDY: 6, headTilt: -0.1, tailRaise: 0.08, tailSwayAmp: 2, tailSwaySpeed: 0.8, crouch: 0.2 } },
+  EXHAUSTED: { eyes: 'open', mouth: 'smile', paws: 'tucked', tail: 'up', eyeBags: true,
+    rig: { eyeOpen: 0.4, lidTilt: 0.15, pupil: 0.4, blush: 0.2, whisker: -0.2, earRot: 0.3, earFlat: 0.2,
+      tailRaise: 0.25, tailSwayAmp: 3, tailSwaySpeed: 0.8, crouch: 0.3 } },
+  STARVING: { eyes: 'open', mouth: 'meow', paws: 'tucked', tail: 'up', tear: true,
+    rig: { eyeOpen: 0.7, lidTilt: 0.6, pupil: 0.85, blush: 0.15, whisker: -0.3, earRot: 0.35, earFlat: 0.4,
+      headDY: 12, headTilt: -0.06, tailRaise: 0, tailSwayAmp: 2, tailSwaySpeed: 0.6, crouch: 0.65 } },
+  FULL: { eyes: 'happy', mouth: 'licklips', paws: 'tucked', tail: 'up', bellyPuff: 1,
+    rig: { blush: 0.75, headTilt: -0.12, headDY: 2, earRot: 0.12, tailRaise: 0.5, tailSwayAmp: 5, tailSwaySpeed: 1,
+      bodyStretch: 0.05, crouch: 0.15 } },
+  HISS: { eyes: 'open', mouth: 'hiss', paws: 'tucked', tail: 'up', noseWrinkle: true,
+    rig: { eyeOpen: 1.1, lidTilt: -0.75, pupil: 0.92, mouthOpen: 1, blush: 0, whisker: -1, earRot: 0.45, earFlat: 0.9,
+      headDX: -5, headDY: -3, headTilt: -0.1, tailRaise: 0.75, tailPuff: 1, tailSwayAmp: 4, tailSwaySpeed: 10, bodyLift: -4 } }
+};
+
+// Trạng thái thù địch: không nhận vuốt, không rù rù, không phản ứng với đồ ăn
+const HOSTILE_STATES = ['ANNOYED', 'HISS'];
+
+// Ký hiệu cảm xúc bay lên khi mèo vào trạng thái
+const STATE_MARKERS = {
+  CURIOUS: '❓',
+  SURPRISED: '❗',
+  ANNOYED: '💢',
+  SLOW_BLINK: '💗',
+  GREETING: '💛',
+  SULKING: '💧',
+  KNEADING: '🎵',
+  SICK: '🤒',
+  EXHAUSTED: '😪',
+  STARVING: '😿',
+  FULL: '😋',
+  HISS: '😾'
+};
+
+// Tấm thảm tròn trong ảnh nền assets/room_bg.jpg (pixel ảnh). Ảnh vẽ bằng CSS
+// background-size: cover; background-position: center bottom (style.css, #game-container).
+// Đổi ảnh nền thì phải đo lại các số này.
+const ROOM_BG = {
+  width: 1376,
+  height: 768,
+  rug: { x: 730, y: 632, rx: 360, ry: 66 }
+};
+
+// Khung bao mèo quanh gốc toạ độ (đơn vị trước khi nhân scale), gồm đuôi và tai
+const CAT_BOUNDS = { left: -140, top: -100, right: 125, bottom: 62 };
 
 class CatRenderer {
   constructor(canvasId) {
@@ -67,7 +194,41 @@ class CatRenderer {
     // Hạt hiệu ứng
     this.particles = [];
 
+    // Rig biểu cảm hiện tại và thời gian đã ở trong trạng thái hành vi
+    this.rig = { ...RIG_DEFAULTS };
+    this.prevState = null;
+    this.stateTime = 0;
+    this.isPurring = false;
+
+    // Món ăn đang được kéo về phía mèo: { foodId, near } (near = con trỏ đang ở trên mèo)
+    this.foodDrag = null;
+
     this.initEvents();
+  }
+
+  // Con trỏ (toạ độ canvas) có nằm trong vùng elip quanh dáng nằm loaf không
+  isPointOnCat(px, py) {
+    const dx = px - (this.x + 10 * this.scale);
+    const dy = py - (this.y - 10 * this.scale);
+    const rx = 125 * this.scale;
+    const ry = 85 * this.scale;
+    return (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1.0;
+  }
+
+  // --- KÉO THẢ ĐỒ ĂN: UI gọi khi người chơi kéo món ăn (toạ độ client) ---
+  setFoodDrag(foodId, clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.mouseX = clientX - rect.left;
+    this.mouseY = clientY - rect.top;
+    this.foodDrag = { foodId, near: this.isPointOnCat(this.mouseX, this.mouseY) };
+    return this.foodDrag.near;
+  }
+
+  // Kết thúc kéo; trả về true nếu món ăn được thả trúng mèo
+  endFoodDrag() {
+    const dropped = !!(this.foodDrag && this.foodDrag.near);
+    this.foodDrag = null;
+    return dropped;
   }
 
   resize() {
@@ -77,16 +238,81 @@ class CatRenderer {
     this.width = this.canvas.width;
     this.height = this.canvas.height;
 
-    this.scale = Math.min(this.width / 1300, this.height / 800) * 1.28;
-    this.scale = Math.max(0.9, Math.min(1.5, this.scale));
-
-    this.baseX = this.width * 0.52;
-    this.baseY = this.height * 0.59;
+    this.layoutOnRug();
 
     if (!window.gameState || window.gameState.behaviorState !== 'ZOOMIES') {
       this.x = this.baseX;
       this.y = this.baseY;
     }
+
+    // Đồ vật trên sàn đặt cạnh mèo (trước đây cố định theo kích thước canvas lúc khởi tạo)
+    this.foodBowl.x = this.baseX - 150 * this.scale;
+    this.foodBowl.y = this.baseY + 45 * this.scale;
+    this.yarnBall.x = this.baseX - 205 * this.scale;
+    this.yarnBall.y = this.baseY + 50 * this.scale;
+    this.yarnBall.vx = 0;
+    this.yarnBall.vy = 0;
+  }
+
+  // Đặt mèo nằm trên tấm thảm của ảnh nền. Thử nhiều điểm trên thảm, chọn điểm mà mèo
+  // ít bị các khối UI che nhất (getBlockedRects do app.js cung cấp), ưu tiên gần giữa thảm.
+  layoutOnRug() {
+    const W = this.width;
+    const H = this.height;
+    const cover = Math.max(W / ROOM_BG.width, H / ROOM_BG.height);
+    const offX = (W - ROOM_BG.width * cover) / 2;
+    const offY = H - ROOM_BG.height * cover;
+    const rug = ROOM_BG.rug;
+    const cx = offX + rug.x * cover;
+    const cy = offY + rug.y * cover;
+    const rx = rug.rx * cover;
+    const ry = rug.ry * cover;
+
+    // Mèo co giãn theo ảnh nền để giữ đúng tỉ lệ với căn phòng
+    this.scale = Math.max(0.7, Math.min(1.9, cover * 1.2));
+    const s = this.scale;
+
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const blocked = (this.getBlockedRects ? this.getBlockedRects() : []).map(r => ({
+      left: r.left - canvasRect.left,
+      top: r.top - canvasRect.top,
+      right: r.right - canvasRect.left,
+      bottom: r.bottom - canvasRect.top
+    }));
+
+    let best = null;
+    for (let u = -0.8; u <= 0.81; u += 0.2) {
+      for (let v = -0.6; v <= 0.61; v += 0.3) {
+        // Điểm tiếp đất (tâm bóng đổ) nằm trên thảm; gốc mèo lệch so với bóng đổ (-10, 44)
+        const ox = cx + u * rx + 10 * s;
+        const oy = cy + v * ry - 44 * s;
+        const box = {
+          left: ox + CAT_BOUNDS.left * s,
+          top: oy + CAT_BOUNDS.top * s,
+          right: ox + CAT_BOUNDS.right * s,
+          bottom: oy + CAT_BOUNDS.bottom * s
+        };
+        const area = (box.right - box.left) * (box.bottom - box.top);
+        let cost = 0;
+        blocked.forEach(b => {
+          const w = Math.min(box.right, b.right) - Math.max(box.left, b.left);
+          const h = Math.min(box.bottom, b.bottom) - Math.max(box.top, b.top);
+          if (w > 0 && h > 0) cost += w * h;
+        });
+        // Phần mèo ra ngoài màn hình tính nặng gấp đôi
+        const inW = Math.max(0, Math.min(box.right, W) - Math.max(box.left, 0));
+        const inH = Math.max(0, Math.min(box.bottom, H) - Math.max(box.top, 0));
+        cost += (area - inW * inH) * 2;
+        // Ưu tiên gần giữa thảm khi mức bị che như nhau
+        cost += Math.hypot(u, v) * area * 0.01;
+        if (!best || cost < best.cost) best = { cost, ox, oy };
+      }
+    }
+    this.baseX = best.ox;
+    this.baseY = best.oy;
+    // Zoomies chạy ngang trong phạm vi tấm thảm
+    this.runLeft = Math.max(cx - rx * 0.9, 0);
+    this.runRight = Math.min(cx + rx * 0.9, W);
   }
 
   initEvents() {
@@ -103,15 +329,10 @@ class CatRenderer {
       this.laserDot.x = this.mouseX;
       this.laserDot.y = this.mouseY;
 
-      // Vùng va chạm quanh dáng nằm loaf
-      const dx = this.mouseX - (this.x + 10 * this.scale);
-      const dy = this.mouseY - (this.y - 10 * this.scale);
-      const hitRadiusX = 125 * this.scale;
-      const hitRadiusY = 85 * this.scale;
+      this.isHoveringCat = this.isPointOnCat(this.mouseX, this.mouseY);
 
-      this.isHoveringCat = (dx * dx) / (hitRadiusX * hitRadiusX) + (dy * dy) / (hitRadiusY * hitRadiusY) <= 1.0;
-
-      if (this.isHoveringCat) {
+      // Đang kéo đồ ăn thì không tính là vuốt ve
+      if (this.isHoveringCat && !this.foodDrag) {
         const now = performance.now();
         if (now - this.lastPetTime > 260) {
           this.lastPetTime = now;
@@ -137,6 +358,10 @@ class CatRenderer {
           this.yarnBall.vx = (this.yarnBall.x - this.mouseX) * 0.45;
           this.yarnBall.vy = -200;
           if (window.catAudio) window.catAudio.squeak();
+          // Mèo đang rảnh thì nghiêng đầu tò mò nhìn bóng len
+          if (window.gameState && window.gameState.behaviorState === 'IDLE') {
+            window.gameState.setBehavior('CURIOUS', 2.8);
+          }
           this.spawnParticle('sparkle', this.yarnBall.x, this.yarnBall.y, { text: '✨', size: 24 });
         }
       }
@@ -150,7 +375,23 @@ class CatRenderer {
   triggerPetFeedback(isClick = false) {
     if (!window.gameState) return;
 
-    window.gameState.pet();
+    const result = window.gameState.pet(isClick);
+
+    if (result === 'annoyed' || result === 'hiss') {
+      // Mèo đang cáu: không rù rù, chỉ giật mình nhẹ
+      this.squishX = 0.96;
+      this.squishY = 1.04;
+      if (Math.random() < 0.3) {
+        this.spawnParticle('mark', this.x + 80 * this.scale, this.y - 90 * this.scale, { text: '💢', size: 22 * this.scale });
+      }
+      return;
+    }
+    if (result === 'startled') return;
+    if (result === 'dozing') {
+      // Vuốt nhẹ khi mèo ngủ: mèo ngủ tiếp, chỉ rù rù khẽ
+      this.purrIntensity = Math.max(this.purrIntensity, 0.4);
+      return;
+    }
 
     // Nhún đàn hồi squishy loaf
     this.squishX = 1.15;
@@ -258,8 +499,30 @@ class CatRenderer {
 
     if (state === 'PETTING') {
       this.kneadCycle = Math.sin(this.time * 6);
+    } else if (state === 'KNEADING') {
+      this.kneadCycle = Math.sin(this.time * 5);
+      this.purrIntensity = Math.max(this.purrIntensity, 0.35);
     } else {
       this.kneadCycle = 0;
+    }
+
+    // Rig biểu cảm: đếm thời gian trong trạng thái và nội suy về đích
+    if (state !== this.prevState) {
+      this.prevState = state;
+      this.stateTime = 0;
+      this.onStateEnter(state);
+    } else {
+      this.stateTime += delta;
+    }
+    this.updateRig(delta, state);
+
+    // Tiếng rù rù chỉ kéo dài khi còn được vuốt
+    if (window.catAudio) {
+      if (window.catAudio.purrGain) this.isPurring = true;
+      if (this.isPurring && this.purrIntensity < 0.05) {
+        window.catAudio.stopPurr();
+        this.isPurring = false;
+      }
     }
 
     if (state === 'EATING') {
@@ -277,10 +540,10 @@ class CatRenderer {
 
     if (state === 'ZOOMIES') {
       this.x += this.zoomiesDir * this.zoomiesSpeed * delta;
-      if (this.x > this.width * 0.78) {
+      if (this.x > (this.runRight ?? this.width * 0.78)) {
         this.zoomiesDir = -1;
         this.spawnParticle('dust', this.x, this.y + 20, { text: '💨', size: 32 });
-      } else if (this.x < this.width * 0.25) {
+      } else if (this.x < (this.runLeft ?? this.width * 0.25)) {
         this.zoomiesDir = 1;
         this.spawnParticle('dust', this.x, this.y + 20, { text: '💨', size: 32 });
       }
@@ -371,6 +634,7 @@ class CatRenderer {
           belly: '#ffffff',
           innerEar: '#fda4af',
           eyeColor: '#84cc16',
+          whisker: 'rgba(226, 232, 240, 0.8)',
           nose: '#f43f5e'
         };
       case 'black_cat':
@@ -383,6 +647,7 @@ class CatRenderer {
           belly: '#0f172a',
           innerEar: '#fb7185',
           eyeColor: '#facc15',
+          whisker: 'rgba(226, 232, 240, 0.8)',
           nose: '#1e293b'
         };
       case 'siamese':
@@ -421,6 +686,7 @@ class CatRenderer {
 
     this.renderFloorItems();
     this.render3DCatLoaf(state, customization);
+    this.renderFoodDropZone();
     this.renderActiveToys();
     this.renderParticles();
   }
@@ -504,33 +770,143 @@ class CatRenderer {
   }
 
   // ===================================================================
+  // RIG BIỂU CẢM: ĐÍCH THEO TRẠNG THÁI + NỘI SUY MƯỢT
+  // ===================================================================
+  getRigTarget(state) {
+    const expr = CAT_EXPRESSIONS[state] || CAT_EXPRESSIONS.IDLE;
+    const target = { ...RIG_DEFAULTS, ...(expr.rig || {}) };
+    const t = this.stateTime;
+
+    switch (state) {
+      case 'IDLE': {
+        // Tâm trạng nền: lúc rảnh, chỉ số hiện ra mặt mà không cần trạng thái riêng
+        const v = window.gameState ? window.gameState.data.vitals : null;
+        if (v) {
+          if (v.happiness > 80) { target.blush = 0.6; target.tailRaise = 0.95; }
+          if (v.happiness < 35) { target.lidTilt = 0.3; target.tailRaise = 0.4; target.earRot = 0.15; }
+          if (v.hunger < 35) { target.lidTilt = Math.max(target.lidTilt, 0.25); target.whisker = 0.3; }
+          if (v.energy < 25) { target.eyeOpen = 0.55; target.earRot += 0.1; }
+        }
+        break;
+      }
+      case 'BEGGING':
+        target.mouthOpen = 0.2 + 0.45 * Math.max(0, Math.sin(t * 4));
+        break;
+      case 'SLOW_BLINK':
+        // Khép hờ → nhắm lâu → mở dần (chuỗi nháy chậm, Humphrey et al. 2020)
+        target.eyeOpen = t < 0.5 ? 0.55 : t < 1.7 ? 0.04 : t < 2.2 ? 0.5 : 0.85;
+        break;
+      case 'SURPRISED':
+        target.bodyLift = t < 0.25 ? -24 : 0;
+        target.tailPuff = t < 1.2 ? 1 : 0.4;
+        break;
+      case 'GREETING':
+        target.mouthOpen = t > 0.2 && t < 0.8 ? 0.45 : 0;
+        break;
+      case 'EXHAUSTED': {
+        // Gật gù: mí sụp dần, đầu gục xuống, rồi giật mình ngẩng lên, lặp mỗi 3 giây
+        const c = t % 3;
+        target.eyeOpen = c < 2.2 ? 0.45 - c * 0.17 : 0.55;
+        target.headDY = c < 2.2 ? 4 + c * 4 : 0;
+        break;
+      }
+      case 'STARVING':
+        // Kêu yếu ớt từng hồi
+        target.mouthOpen = (t % 2.4) < 0.5 ? 0.35 : 0;
+        break;
+      case 'HISS':
+        // Lao người ra trước rồi lùi lại phòng thủ
+        if (t < 0.2) {
+          target.headDX = 6;
+          target.bodyLift = -8;
+        }
+        break;
+      case 'PLAYING': {
+        // Rình (lắc mông) → vồ → tiếp đất, lặp mỗi 3.2 giây
+        const c = t % 3.2;
+        if (c > 2.2 && c < 2.6) {
+          target.crouch = 0;
+          target.bodyLift = -26;
+          target.bodyStretch = 0.12;
+          target.eyeOpen = 1.2;
+        } else if (c >= 2.6) {
+          target.crouch = 0.25;
+        }
+        break;
+      }
+    }
+    return target;
+  }
+
+  updateRig(delta, state) {
+    const target = this.getRigTarget(state);
+    // Thấy đồ ăn được kéo tới: mắt mở to, đồng tử giãn, tai/râu chĩa trước; sát miệng thì há chờ
+    if (this.foodDrag && state !== 'SLEEPING' && !HOSTILE_STATES.includes(state)) {
+      target.eyeOpen = Math.max(target.eyeOpen, 1.12);
+      target.pupil = 0.85;
+      target.whisker = 0.8;
+      target.earRot = -0.15;
+      target.earFlat = 0;
+      target.lidTilt = 0;
+      target.headTilt = 0.12;
+      target.mouthOpen = this.foodDrag.near ? 0.65 : 0.15;
+    }
+    const k = 1 - Math.exp(-delta * 9);
+    for (const key in target) {
+      this.rig[key] += (target[key] - this.rig[key]) * k;
+    }
+  }
+
+  // Ký hiệu cảm xúc bay lên trên đầu khi vào trạng thái
+  onStateEnter(state) {
+    const mark = STATE_MARKERS[state];
+    if (!mark) return;
+    this.spawnParticle('mark', this.x + 95 * this.scale, this.y - 100 * this.scale, {
+      text: mark,
+      size: 30 * this.scale,
+      vx: 0,
+      vy: 10,
+      decay: 0.45
+    });
+  }
+
+  getPawPose(state, expr) {
+    if (state === 'PLAYING') {
+      const c = this.stateTime % 3.2;
+      if (c > 2.2 && c < 2.75) return 'bat';
+    }
+    return expr.paws;
+  }
+
+  // ===================================================================
   // CHÍNH XÁC DÁNG NẰM LOAF GÓC NGHIÊNG 3/4 (THEO ẢNH MẪU)
   // ===================================================================
   render3DCatLoaf(state, customization) {
     const ctx = this.ctx;
     const s = this.scale;
     const p = this.getCoatPalette(customization.fur);
+    const rig = this.rig;
+    const expr = CAT_EXPRESSIONS[state] || CAT_EXPRESSIONS.IDLE;
 
     ctx.save();
     ctx.translate(this.x, this.y);
 
     const breathY = this.breathCycle * 0.022;
-    const currentSquishX = this.squishX;
-    const currentSquishY = this.squishY + breathY;
-    ctx.scale(currentSquishX * s, currentSquishY * s);
+    ctx.scale(this.squishX * s, (this.squishY + breathY) * s);
 
     if (state === 'ZOOMIES') {
       ctx.scale(this.zoomiesDir, 1);
     }
 
-    // 1. Bóng đổ 3/4 dưới thân trên thảm
+    // 1. Bóng đổ nằm trên sàn, thu nhỏ khi mèo nhảy lên
+    const shadowScale = 1 + Math.min(0, rig.bodyLift) / 140;
     ctx.beginPath();
-    ctx.ellipse(-10, 44, 115, 30, -0.05, 0, Math.PI * 2);
+    ctx.ellipse(-10, 44, 115 * shadowScale * (1 + rig.bodyStretch), 30 * shadowScale, -0.05, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(15, 23, 42, 0.38)';
     ctx.fill();
 
     // Vòng purr phát sáng
-    if (this.purrIntensity > 0.05) {
+    if (this.purrIntensity > 0.05 && !HOSTILE_STATES.includes(state)) {
       ctx.save();
       const ringRadius = 115 + (1 - this.purrIntensity) * 45;
       ctx.beginPath();
@@ -541,45 +917,58 @@ class CatRenderer {
       ctx.restore();
     }
 
-    // 2. ĐUÔI XÙ DỰNG CAO BÊN TRÁI (THEO ẢNH MẪU)
-    this.render3DTail(ctx, p, state);
+    // Biến đổi toàn thân: nhảy, kéo dài, hạ thấp rình mồi, lắc lư
+    ctx.translate(0, rig.bodyLift + rig.crouch * 12);
+    ctx.scale(1 + rig.bodyStretch, 1 - rig.crouch * 0.14);
+    if (rig.bodyRock > 0.01) {
+      ctx.rotate(Math.sin(this.time * 3.2) * 0.08 * rig.bodyRock);
+    }
+    // Run lẩy bẩy (ốm)
+    if (expr.shiver) {
+      ctx.translate(Math.sin(this.time * 45) * expr.shiver, 0);
+    }
 
-    // 3. THÂN BÁNH MÌ LOAF BÉO MÚP (3/4 PERSPECTIVE BODY)
+    const paws = this.getPawPose(state, expr);
+
+    // 2-3. Đuôi sau thân; riêng đuôi cuộn khi ngủ quấn ra trước thân
+    if (expr.tail !== 'curl') this.render3DTail(ctx, p, expr);
     this.render3DBody(ctx, p, state);
+    if (expr.tail === 'curl') this.render3DTail(ctx, p, expr);
 
-    // 4. BỤNG TRẮNG VÀ CHÂN TRƯỚC XẾP GỌN (WHITE BELLY & PAWS)
-    this.render3DChestAndPaws(ctx, p, state);
+    // 4. Bụng trắng và chân trước lớp dưới (chân đặt trên sàn)
+    this.render3DChestAndPaws(ctx, p, paws, 'under', expr.bellyPuff || 0);
 
-    // 5. ĐẦU NGHIÊNG BÊN PHẢI VỚI MÁ XÙ 3 TẦNG (FLUFFY HEAD & CHEEKS)
-    this.render3DHead(ctx, p, state);
+    // 5-6. Đầu, mặt và mũ/kính cùng một phép biến đổi để nghiêng/cúi cùng nhau
+    ctx.save();
+    ctx.translate(CAT_HEAD.x + rig.headDX, CAT_HEAD.y + rig.headDY);
+    ctx.rotate(rig.headTilt);
+    this.render3DHead(ctx, p);
+    this.render3DFace(ctx, p, expr, state);
+    this.renderHeadCostumes(ctx, customization);
+    ctx.restore();
 
-    // 6. KHUÔN MẶT CƯỜI HÍP TỊT ^ ^ VÀ BIỂU CẢM (SWEET FACE)
-    this.render3DFace(ctx, p, state);
-
-    // 7. PHỤ KIỆN
-    this.renderCostumes(ctx, customization);
+    // 7. Phụ kiện cổ, rồi chân giơ lên (vẽ đè lên mặt khi liếm/rửa mặt)
+    this.renderNeckCostume(ctx, customization);
+    this.render3DChestAndPaws(ctx, p, paws, 'over');
 
     ctx.restore();
   }
 
-  // --- 2. ĐUÔI XÙ TO UỐN LƯỢN BÊN TRÁI (FLUFFY UPWARD TAIL) ---
-  render3DTail(ctx, p, state) {
+  // --- 2. ĐUÔI THAM SỐ: DỰNG/HẠ, XÙ, VẪY/QUẤT ---
+  render3DTail(ctx, p, expr) {
     ctx.save();
-    const isSleeping = state === 'SLEEPING';
-    const isPlaying = state === 'PLAYING';
+    const rig = this.rig;
 
-    let tailSway = this.tailCycle * 14;
-    if (isPlaying) {
-      tailSway = Math.sin(this.time * 8) * 24;
-    }
-
-    if (isSleeping) {
-      // Đuôi cuộn tròn quanh chân
+    if (expr.tail === 'curl') {
+      // Đuôi cuộn tròn quanh chân khi ngủ
       ctx.beginPath();
       ctx.moveTo(-65, 20);
       ctx.bezierCurveTo(-95, 28, -95, 48, -48, 50);
-      ctx.lineWidth = 34;
       ctx.lineCap = 'round';
+      ctx.lineWidth = 38;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+      ctx.stroke();
+      ctx.lineWidth = 34;
       ctx.strokeStyle = p.main;
       ctx.stroke();
 
@@ -587,57 +976,84 @@ class CatRenderer {
       ctx.arc(-48, 50, 16, 0, Math.PI * 2);
       ctx.fillStyle = p.belly;
       ctx.fill();
-    } else {
-      // Đuôi mọc từ góc sau bên trái, xù to uốn cong lên trên (như hình mẫu)
-      const rootX = -72;
-      const rootY = 18;
-      const tipX = -88 - tailSway * 1.2;
-      const tipY = -72;
-
-      ctx.beginPath();
-      // Mép trái đuôi xù
-      ctx.moveTo(rootX, rootY);
-      ctx.bezierCurveTo(-115, 0, -125 - tailSway, -40, tipX - 16, tipY);
-      // Chóp đuôi tròn xù
-      ctx.arc(tipX, tipY, 22, Math.PI, 0, false);
-      // Mép phải đuôi lượn về lưng
-      ctx.bezierCurveTo(tipX + 22, -35, -70, -15, -45, 10);
-      ctx.closePath();
-
-      const tailGrad = ctx.createLinearGradient(rootX, rootY, tipX, tipY);
-      tailGrad.addColorStop(0, p.shadowTone || p.main);
-      tailGrad.addColorStop(0.65, p.main);
-      tailGrad.addColorStop(1, p.mainGradient || p.main);
-      ctx.fillStyle = tailGrad;
-      ctx.fill();
-
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-      ctx.stroke();
-
-      // Sọc vằn trên đuôi xù
-      if (p.secondary) {
-        ctx.strokeStyle = p.secondary;
-        ctx.lineWidth = 10;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(-108 - tailSway * 0.4, -12); ctx.lineTo(-80 - tailSway * 0.4, -20);
-        ctx.moveTo(-100 - tailSway * 0.8, -38); ctx.lineTo(-72 - tailSway * 0.8, -45);
-        ctx.stroke();
-      }
-
-      // Chóp đuôi lông xù trắng muốt bồng bềnh
-      ctx.beginPath();
-      ctx.arc(tipX, tipY, 21, 0, Math.PI * 2);
-      ctx.fillStyle = p.belly;
-      ctx.fill();
-
-      // Búi lông tơ chóp đuôi
-      ctx.beginPath();
-      ctx.arc(tipX - 10, tipY + 6, 9, 0, Math.PI * 2);
-      ctx.arc(tipX + 10, tipY + 6, 9, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.restore();
+      return;
     }
+
+    // Đường cong xương đuôi nội suy giữa "hạ sát sàn" và "dựng thẳng"
+    const raise = Math.max(0, Math.min(1, rig.tailRaise));
+    const sway = Math.sin(this.time * rig.tailSwaySpeed) * rig.tailSwayAmp;
+    const mix = (low, high) => low + (high - low) * raise;
+    const P0 = { x: -72, y: 18 };
+    const P1 = { x: mix(-100, -112), y: mix(36, 0) };
+    const P2 = { x: mix(-140, -125) - sway * 0.6, y: mix(40, -40) };
+    const P3 = { x: mix(-168, -88) - sway * 1.2, y: mix(32, -72) + sway * 0.3 * (1 - raise) };
+    const width = 30 * (1 + 0.6 * rig.tailPuff);
+
+    const spine = () => {
+      ctx.beginPath();
+      ctx.moveTo(P0.x, P0.y);
+      ctx.bezierCurveTo(P1.x, P1.y, P2.x, P2.y, P3.x, P3.y);
+    };
+
+    ctx.lineCap = 'round';
+
+    // Đuôi xù: viền lông tua tủa (nét đứt dày hơn thân đuôi)
+    if (rig.tailPuff > 0.15) {
+      spine();
+      ctx.setLineDash([3, 5]);
+      ctx.lineWidth = width + 12 * rig.tailPuff;
+      ctx.strokeStyle = p.main;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    spine();
+    ctx.lineWidth = width + 5;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+    ctx.stroke();
+
+    const tailGrad = ctx.createLinearGradient(P0.x, P0.y, P3.x, P3.y);
+    tailGrad.addColorStop(0, p.shadowTone || p.main);
+    tailGrad.addColorStop(0.6, p.main);
+    tailGrad.addColorStop(1, p.mainGradient || p.main);
+    spine();
+    ctx.lineWidth = width;
+    ctx.strokeStyle = tailGrad;
+    ctx.stroke();
+
+    // Sọc vằn vuông góc với đường cong đuôi
+    if (p.secondary) {
+      const bez = (t, a, b, c, d) => {
+        const u = 1 - t;
+        return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
+      };
+      ctx.lineCap = 'butt';
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = p.secondary;
+      [0.42, 0.62, 0.8].forEach(t => {
+        const x = bez(t, P0.x, P1.x, P2.x, P3.x);
+        const y = bez(t, P0.y, P1.y, P2.y, P3.y);
+        const nx = bez(t + 0.01, P0.x, P1.x, P2.x, P3.x) - x;
+        const ny = bez(t + 0.01, P0.y, P1.y, P2.y, P3.y) - y;
+        const len = Math.hypot(nx, ny) || 1;
+        const half = width * 0.42;
+        ctx.beginPath();
+        ctx.moveTo(x - (ny / len) * half, y + (nx / len) * half);
+        ctx.lineTo(x + (ny / len) * half, y - (nx / len) * half);
+        ctx.stroke();
+      });
+    }
+
+    // Chóp đuôi trắng bồng bềnh
+    // Chóp đuôi chỉ to thêm một chút khi xù, để không thành quả bóng
+    const tipR = 30 * 0.55 * (1 + 0.25 * rig.tailPuff);
+    ctx.fillStyle = p.belly;
+    ctx.beginPath();
+    ctx.arc(P3.x, P3.y, tipR, 0, Math.PI * 2);
+    ctx.arc(P3.x - tipR * 0.5, P3.y + tipR * 0.3, tipR * 0.45, 0, Math.PI * 2);
+    ctx.arc(P3.x + tipR * 0.5, P3.y + tipR * 0.3, tipR * 0.45, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.restore();
   }
@@ -645,28 +1061,18 @@ class CatRenderer {
   // --- 3. THÂN BÁNH MÌ LOAF BÉO TRÒN (CHUBBY LOAF BODY) ---
   render3DBody(ctx, p, state) {
     ctx.save();
-    const isPlaying = state === 'PLAYING';
-    const isYawning = state === 'YAWNING';
-
-    if (isPlaying) {
+    if (state === 'PLAYING') {
       ctx.translate(this.buttWiggle, 0);
-    }
-    if (isYawning) {
-      ctx.translate(0, -6);
-      ctx.scale(1.02, 1.08);
     }
 
     // Dáng nằm bánh mì loaf góc 3/4: Lưng vồng cao từ trái sang phải
     ctx.beginPath();
     ctx.moveTo(-92, 25);
-    // Lưng cong múp míp
     ctx.bezierCurveTo(-96, -26, -35, -45, 20, -36);
     ctx.bezierCurveTo(75, -28, 110, -5, 105, 34);
-    // Bụng mềm áp sát mặt sàn
     ctx.bezierCurveTo(90, 52, -75, 52, -92, 25);
     ctx.closePath();
 
-    // Shading nổi khối mềm mượt (Warm 3D Shading)
     const bodyGrad = ctx.createRadialGradient(10, -10, 20, 0, 20, 115);
     bodyGrad.addColorStop(0, p.mainGradient || '#fb923c');
     bodyGrad.addColorStop(0.68, p.main);
@@ -692,234 +1098,187 @@ class CatRenderer {
       ctx.fill();
     }
 
+    // Đùi sau tròn: chỉ một đường viền cong tạo chiều sâu
+    ctx.beginPath();
+    ctx.ellipse(-50, 24, 34, 24, -0.15, Math.PI * 1.0, Math.PI * 1.75);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.14)';
+    ctx.stroke();
+
+    // Bàn chân sau thò ra dưới đùi
+    this.drawPaw(ctx, -60, 45, 16, 9, -0.08, p, { toes: true });
+
     ctx.restore();
   }
 
-  // --- 4. BỤNG TRẮNG VÀ CHÂN TRƯỚC (WHITE BELLY & PAWS) ---
-  render3DChestAndPaws(ctx, p, state) {
+  // Một bàn chân: khối tròn có ngón, hoặc đệm thịt hồng khi ngửa lên
+  drawPaw(ctx, x, y, rx, ry, rot, p, opts = {}) {
     ctx.save();
-    const isRolling = state === 'ROLLING';
-    const isYawning = state === 'YAWNING';
-    const isLicking = state === 'LICKING_PAW';
-    const isBegging = state === 'BEGGING';
+    ctx.translate(x, y);
+    ctx.rotate(rot);
 
-    // 1. Mảng bụng trắng muốt trải từ giữa thân ra phía trước (như ảnh mẫu)
     ctx.beginPath();
-    ctx.moveTo(-35, 46);
-    ctx.quadraticCurveTo(-15, 16, 25, 12);
-    ctx.bezierCurveTo(65, 12, 98, 22, 98, 44);
-    ctx.quadraticCurveTo(30, 52, -35, 46);
-    ctx.closePath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
     ctx.fillStyle = p.belly;
     ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+    ctx.stroke();
 
-    // Viền lông xù ở mép bụng trắng
-    ctx.fillStyle = p.belly;
-    ctx.beginPath();
-    ctx.arc(-15, 34, 10, 0, Math.PI * 2);
-    ctx.arc(8, 24, 12, 0, Math.PI * 2);
-    ctx.arc(38, 20, 11, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 2. Hai bàn chân trước xinh xắn
-    if (isRolling) {
-      // Lăn ngửa bụng khoe đệm chân hồng
-      ctx.fillStyle = p.belly;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-      ctx.lineWidth = 2.5;
-
-      [-28, 38].forEach(px => {
-        ctx.beginPath();
-        ctx.ellipse(px, -15, 16, 20, px < 0 ? -0.25 : 0.25, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#fda4af';
-        ctx.beginPath();
-        ctx.ellipse(px, -17, 8, 7, 0, 0, Math.PI * 2);
-        ctx.arc(px - 6, -26, 3.5, 0, Math.PI * 2);
-        ctx.arc(px, -29, 3.8, 0, Math.PI * 2);
-        ctx.arc(px + 6, -26, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = p.belly;
-      });
-    } else if (isBegging) {
-      // Chắp 2 chân xin ăn
-      const begY = -12 + Math.sin(this.time * 8) * 8;
-      ctx.fillStyle = p.belly;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-      ctx.lineWidth = 2.5;
-
-      ctx.beginPath();
-      ctx.ellipse(32, begY, 15, 18, 0.15, 0, Math.PI * 2);
-      ctx.ellipse(58, begY, 15, 18, -0.15, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    } else if (isLicking) {
-      // Giơ một chân liếm
-      ctx.fillStyle = p.belly;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-      ctx.lineWidth = 2.5;
-
-      ctx.beginPath();
-      ctx.ellipse(22, -18, 16, 18, 0.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
+    if (opts.beans) {
       ctx.fillStyle = '#fda4af';
       ctx.beginPath();
-      ctx.ellipse(22, -18, 6, 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, ry * 0.18, rx * 0.42, ry * 0.34, 0, 0, Math.PI * 2);
       ctx.fill();
-
-      ctx.fillStyle = p.belly;
       ctx.beginPath();
-      ctx.ellipse(75, 45, 20, 13, 0.05, 0, Math.PI * 2);
+      ctx.arc(-rx * 0.46, -ry * 0.36, rx * 0.17, 0, Math.PI * 2);
+      ctx.arc(0, -ry * 0.56, rx * 0.18, 0, Math.PI * 2);
+      ctx.arc(rx * 0.46, -ry * 0.36, rx * 0.17, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
-    } else if (isYawning) {
-      // Duỗi chân trước vươn vai
-      ctx.fillStyle = p.belly;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-      ctx.lineWidth = 2.5;
-
-      ctx.beginPath();
-      ctx.ellipse(40, 56, 22, 14, -0.05, 0, Math.PI * 2);
-      ctx.ellipse(82, 54, 22, 14, 0.08, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      // Bình thường: 2 bàn chân xếp ngay ngắn ở góc trước (như ảnh mẫu)
-      const leftKnead = this.kneadCycle * 4;
-      const rightKnead = -this.kneadCycle * 4;
-
-      ctx.fillStyle = p.belly;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-      ctx.lineWidth = 2.5;
-
-      // Chân trước trái
-      ctx.beginPath();
-      ctx.ellipse(28, 47 + leftKnead, 19, 13, -0.05, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Chân trước phải
-      ctx.beginPath();
-      ctx.ellipse(74, 46 + rightKnead, 20, 13, 0.08, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Ngấn ngón chân tròn xoe
+    } else if (opts.toes) {
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.24)';
-      ctx.lineWidth = 2.2;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(23, 53 + leftKnead); ctx.lineTo(23, 43 + leftKnead);
-      ctx.moveTo(33, 53 + leftKnead); ctx.lineTo(33, 43 + leftKnead);
-      ctx.moveTo(69, 52 + rightKnead);  ctx.lineTo(69, 42 + rightKnead);
-      ctx.moveTo(79, 52 + rightKnead);  ctx.lineTo(79, 42 + rightKnead);
+      ctx.moveTo(-rx * 0.3, ry * 0.15); ctx.lineTo(-rx * 0.3, ry * 0.92);
+      ctx.moveTo(rx * 0.3, ry * 0.15);  ctx.lineTo(rx * 0.3, ry * 0.92);
       ctx.stroke();
     }
 
     ctx.restore();
   }
 
-  // --- 5. ĐẦU NGHIÊNG BÊN PHẢI VỚI MÁ XÙ 3 TẦNG (FLUFFY HEAD & CHEEKS) ---
-  render3DHead(ctx, p, state) {
+  // Cẳng chân trước: dải lông trắng có viền, nối vai với bàn chân
+  drawForeleg(ctx, fromX, fromY, toX, toY, p, width = 22) {
     ctx.save();
-    // Đầu nằm lệch sang phải theo phối cảnh 3/4
-    const headX = 42;
-    const headY = -28;
-    const isPetting = state === 'PETTING';
-    const twitch = this.earTwitchAmount;
-
-    // A. HAI TAI XÙ VỚI TÚM LÔNG TRẮNG
-    const earAngle = isPetting ? 0.14 : 0;
-
-    // Tai Trái (ở sau góc nhìn)
-    ctx.save();
-    ctx.translate(headX - 35, headY - 32);
-    ctx.rotate(-earAngle + twitch);
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(-12, 24);
-    ctx.lineTo(-24, -28);
-    ctx.lineTo(22, 10);
-    ctx.closePath();
-    ctx.fillStyle = p.main;
-    ctx.fill();
-    ctx.lineWidth = 3;
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.lineWidth = width + 4;
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
     ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(-9, 20);
-    ctx.lineTo(-19, -20);
-    ctx.lineTo(15, 8);
-    ctx.closePath();
-    ctx.fillStyle = p.innerEar;
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(-2, 10, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Tai Phải (ở trước góc nhìn)
-    ctx.save();
-    ctx.translate(headX + 35, headY - 32);
-    ctx.rotate(earAngle - twitch);
-    ctx.beginPath();
-    ctx.moveTo(12, 24);
-    ctx.lineTo(26, -28);
-    ctx.lineTo(-20, 10);
-    ctx.closePath();
-    ctx.fillStyle = p.main;
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+    ctx.lineWidth = width;
+    ctx.strokeStyle = p.belly;
     ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(9, 20);
-    ctx.lineTo(20, -20);
-    ctx.lineTo(-14, 8);
-    ctx.closePath();
-    ctx.fillStyle = p.innerEar;
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(2, 10, 6, 0, Math.PI * 2);
-    ctx.fill();
     ctx.restore();
+  }
 
-    // B. MẶT BÉO VỚI 3 TẦNG LÔNG XÙ Ở MÁ (NHƯ HÌNH MẪU!)
+  // --- 4. BỤNG TRẮNG VÀ CHÂN TRƯỚC (WHITE BELLY & PAWS) ---
+  // layer 'under': bụng + chân đặt trên sàn; layer 'over': chân giơ lên trước mặt/ngực
+  render3DChestAndPaws(ctx, p, pose, layer, bellyPuff = 0) {
     ctx.save();
-    ctx.translate(headX, headY);
 
+    if (layer === 'under') {
+      // Mảng bụng trắng trải từ giữa thân ra phía trước
+      ctx.beginPath();
+      ctx.moveTo(-35, 46);
+      ctx.quadraticCurveTo(-15, 16, 25, 12);
+      ctx.bezierCurveTo(65, 12, 98, 22, 98, 44);
+      ctx.quadraticCurveTo(30, 52, -35, 46);
+      ctx.closePath();
+      ctx.fillStyle = p.belly;
+      ctx.fill();
+
+      // Bụng no căng phình ra phía trước
+      if (bellyPuff > 0) {
+        ctx.beginPath();
+        ctx.ellipse(34, 38, 60 + 6 * bellyPuff, 14 + 8 * bellyPuff, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.stroke();
+      }
+
+      // Lông ngực xù
+      ctx.beginPath();
+      ctx.arc(-15, 34, 10, 0, Math.PI * 2);
+      ctx.arc(8, 24, 12, 0, Math.PI * 2);
+      ctx.arc(30, 16, 12, 0, Math.PI * 2);
+      ctx.arc(52, 18, 12, 0, Math.PI * 2);
+      ctx.arc(72, 20, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (pose === 'stretch') {
+        // Duỗi dài chân trước khi vươn vai
+        this.drawForeleg(ctx, 30, 30, 48, 54, p);
+        this.drawForeleg(ctx, 70, 30, 92, 52, p);
+        this.drawPaw(ctx, 52, 56, 22, 13, -0.05, p, { toes: true });
+        this.drawPaw(ctx, 96, 54, 22, 13, 0.08, p, { toes: true });
+      } else if (pose === 'tucked' || pose === 'knead') {
+        // Nhồi bột: nhấc từng chân lên xuống luân phiên
+        const amp = pose === 'knead' ? 7 : 4;
+        const left = this.kneadCycle * amp;
+        const right = -this.kneadCycle * amp;
+        this.drawForeleg(ctx, 28, 26, 28, 40 + left, p, 24);
+        this.drawForeleg(ctx, 74, 26, 74, 39 + right, p, 24);
+        this.drawPaw(ctx, 28, 47 + left, 19, 13 - Math.max(0, left) * 0.2, -0.05, p, { toes: true });
+        this.drawPaw(ctx, 74, 46 + right, 20, 13 - Math.max(0, right) * 0.2, 0.08, p, { toes: true });
+      } else {
+        // Các tư thế giơ một chân: chân còn lại vẫn đặt trên sàn
+        if (pose !== 'beg' && pose !== 'up') {
+          this.drawForeleg(ctx, 74, 26, 74, 39, p, 24);
+          this.drawPaw(ctx, 74, 46, 20, 13, 0.08, p, { toes: true });
+        }
+      }
+    } else {
+      const t = this.time;
+      if (pose === 'up') {
+        // Lăn ngửa bụng: hai chân co trước ngực khoe đệm thịt, quơ quơ
+        const paddle = Math.sin(t * 5) * 4;
+        this.drawForeleg(ctx, 0, 24, -12, 0 + paddle, p);
+        this.drawForeleg(ctx, 26, 26, 14, 8 - paddle, p);
+        this.drawPaw(ctx, -14, -6 + paddle, 15, 18, -0.35, p, { beans: true });
+        this.drawPaw(ctx, 12, 2 - paddle, 15, 18, 0.2, p, { beans: true });
+      } else if (pose === 'beg') {
+        // Chắp hai chân trước ngực, nhún theo nhịp xin ăn
+        const bob = Math.sin(t * 8) * 5;
+        this.drawForeleg(ctx, 26, 30, 30, 14 + bob, p);
+        this.drawForeleg(ctx, 66, 30, 58, 14 + bob, p);
+        this.drawPaw(ctx, 31, 10 + bob, 14, 16, 0.3, p, { toes: true });
+        this.drawPaw(ctx, 57, 10 + bob, 14, 16, -0.3, p, { toes: true });
+      } else if (pose === 'lick') {
+        // Giơ chân lên sát miệng để liếm
+        const lift = Math.sin(t * 6) * 2;
+        this.drawForeleg(ctx, 30, 32, 30, 6 + lift, p);
+        this.drawPaw(ctx, 30, 0 + lift, 15, 18, 0.45, p, { beans: true });
+      } else if (pose === 'wash') {
+        // Xoa chân vòng tròn lên má
+        const wx = 66 + Math.cos(t * 5) * 8;
+        const wy = -26 + Math.sin(t * 5) * 7;
+        this.drawForeleg(ctx, 34, 30, wx - 6, wy + 10, p);
+        this.drawPaw(ctx, wx, wy, 15, 18, -0.4, p, { toes: true });
+      } else if (pose === 'bat') {
+        // Vồ: một chân vả về phía trước
+        this.drawForeleg(ctx, 60, 24, 104, -2, p);
+        this.drawPaw(ctx, 108, -6, 16, 18, -0.6, p, { beans: true });
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // --- 5. ĐẦU: TAI THEO RIG, VIỀN MÁ XÙ MỀM (toạ độ quanh tâm đầu) ---
+  render3DHead(ctx, p) {
+    this.drawEar(ctx, p, -1);
+    this.drawEar(ctx, p, 1);
+
+    ctx.save();
     ctx.beginPath();
-    // Đỉnh đầu tròn
-    ctx.moveTo(-40, -32);
-    ctx.quadraticCurveTo(0, -42, 40, -32);
-
-    // Má Phải: 3 tầng túm lông xù nhô dài ra ngoài
-    ctx.lineTo(54, -16);
-    ctx.lineTo(72, -10); // Túm 1
-    ctx.lineTo(60, 4);
-    ctx.lineTo(78, 12);  // Túm 2
-    ctx.lineTo(62, 22);
-    ctx.lineTo(72, 30);  // Túm 3
-    ctx.lineTo(46, 40);
-
-    // Cằm tròn múp
-    ctx.quadraticCurveTo(0, 48, -45, 40);
-
-    // Má Trái: Túm lông xù
-    ctx.lineTo(-68, 30);
-    ctx.lineTo(-58, 20);
-    ctx.lineTo(-72, 12);
-    ctx.lineTo(-58, 2);
-    ctx.lineTo(-68, -10);
-    ctx.lineTo(-52, -18);
+    ctx.moveTo(-44, -28);
+    ctx.quadraticCurveTo(0, -48, 44, -28);
+    // Má phải: ba túm lông bo tròn
+    ctx.quadraticCurveTo(58, -20, 60, -8);
+    ctx.quadraticCurveTo(78, -6, 66, 4);
+    ctx.quadraticCurveTo(82, 12, 64, 21);
+    ctx.quadraticCurveTo(74, 34, 46, 38);
+    // Cằm tròn
+    ctx.quadraticCurveTo(0, 52, -46, 38);
+    // Má trái
+    ctx.quadraticCurveTo(-74, 34, -64, 21);
+    ctx.quadraticCurveTo(-82, 12, -66, 4);
+    ctx.quadraticCurveTo(-78, -6, -60, -8);
+    ctx.quadraticCurveTo(-58, -20, -44, -28);
     ctx.closePath();
 
     const headGrad = ctx.createRadialGradient(0, -6, 15, 0, 8, 75);
@@ -928,7 +1287,6 @@ class CatRenderer {
     headGrad.addColorStop(1, p.shadowTone || '#c2410c');
     ctx.fillStyle = headGrad;
     ctx.fill();
-
     ctx.lineWidth = 3.5;
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
     ctx.stroke();
@@ -943,7 +1301,7 @@ class CatRenderer {
       ctx.fill();
     }
 
-    // C. VỆT LÔNG TRẮNG TỪ GIỮA MẮT XÒE XUỐNG 2 MÁ
+    // Vệt lông trắng từ giữa trán xoè xuống hai má
     ctx.beginPath();
     ctx.moveTo(-2, -24);
     ctx.bezierCurveTo(-14, -10, -38, 8, -38, 24);
@@ -955,234 +1313,659 @@ class CatRenderer {
     ctx.fill();
 
     ctx.restore();
+  }
+
+  // Tai: side -1 trái (phía sau), +1 phải (phía trước). Xoay ngang và ép theo rig
+  drawEar(ctx, p, side) {
+    const rig = this.rig;
+    const m = -side; // hình gốc vẽ cho tai trái, lật ngang cho tai phải
+    const twitch = side < 0 ? this.earTwitchAmount : -this.earTwitchAmount;
+
+    ctx.save();
+    ctx.translate(side * 35, -32);
+    ctx.rotate(side * rig.earRot * 0.9 + twitch);
+    // Ép tai: co theo chiều dọc quanh chân tai
+    ctx.translate(0, 16);
+    ctx.scale(1, 1 - rig.earFlat * 0.45);
+    ctx.translate(0, -16);
+
+    ctx.beginPath();
+    ctx.moveTo(-12 * m, 24);
+    ctx.lineTo(-21 * m, -20);
+    ctx.quadraticCurveTo(-25 * m, -32, -15 * m, -26);
+    ctx.lineTo(22 * m, 10);
+    ctx.closePath();
+    ctx.fillStyle = p.main;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-9 * m, 20);
+    ctx.lineTo(-17 * m, -14);
+    ctx.quadraticCurveTo(-19 * m, -22, -12 * m, -18);
+    ctx.lineTo(15 * m, 8);
+    ctx.closePath();
+    ctx.fillStyle = p.innerEar;
+    ctx.fill();
+
+    // Lông tơ trong tai
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-4 * m, 16); ctx.lineTo(-10 * m, 0);
+    ctx.moveTo(0, 14);      ctx.lineTo(-3 * m, -2);
+    ctx.moveTo(4 * m, 13);  ctx.lineTo(4 * m, 2);
+    ctx.stroke();
+
     ctx.restore();
   }
 
-  // --- 6. KHUÔN MẶT CƯỜI HÍP TỊT ^ ^ VÀ BIỂU CẢM NGỌT NGÀO ---
-  render3DFace(ctx, p, state) {
+  // --- 6. KHUÔN MẶT: MÁ, MẮT, MÕM, MŨI, MIỆNG, RÂU (toạ độ quanh tâm đầu) ---
+  render3DFace(ctx, p, expr, state) {
     ctx.save();
-    const headX = 42;
-    const headY = -28;
-    ctx.translate(headX, headY);
+    const rig = this.rig;
 
-    // A. MÁ HỒNG ĐÀO NGỌT NGÀO (ROSY BLUSH)
-    const blushIntensity = state === 'PETTING' ? 0.8 : 0.48;
-    ctx.fillStyle = `rgba(251, 113, 133, ${blushIntensity})`;
+    // A. Má hồng
+    const blush = Math.max(0, Math.min(1, rig.blush));
+    ctx.fillStyle = `rgba(251, 113, 133, ${blush})`;
     ctx.beginPath();
     ctx.ellipse(-38, 16, 13, 8, -0.05, 0, Math.PI * 2);
     ctx.ellipse(38, 16, 13, 8, 0.05, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + blush * 0.5})`;
     ctx.beginPath();
     ctx.arc(-36, 14, 2.5, 0, Math.PI * 2);
     ctx.arc(36, 14, 2.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // B. RÂU MÈO DÀI UỐN LƯỢN (3 CỘNG MỖI BÊN)
-    ctx.strokeStyle = 'rgba(15, 23, 42, 0.6)';
-    ctx.lineWidth = 1.9;
-    ctx.lineCap = 'round';
-    const whiskerWiggle = Math.sin(this.time * 3) * 1.5;
+    // B. Mắt: vuốt ve/rù rù luôn ra mắt cười, trừ khi đang cáu
+    let eyeStyle = expr.eyes;
+    if (eyeStyle === 'open' && !HOSTILE_STATES.includes(state) && (this.isPetting || this.purrIntensity > 0.3)) {
+      eyeStyle = 'happy';
+    }
+    this.renderCatEye(ctx, -28, -4, 13, -1, eyeStyle, p, expr.look);
+    this.renderCatEye(ctx, 28, -4, 13, 1, eyeStyle, p, expr.look);
+    if (eyeStyle === 'open' || eyeStyle === 'kawaii') this.renderBrows(ctx, p);
 
-    ctx.beginPath();
-    // Trái
-    ctx.moveTo(-32, 14); ctx.quadraticCurveTo(-54, 10 + whiskerWiggle, -78, 8);
-    ctx.moveTo(-33, 19); ctx.quadraticCurveTo(-56, 20, -80, 22);
-    ctx.moveTo(-32, 24); ctx.quadraticCurveTo(-54, 28 - whiskerWiggle, -75, 33);
-    // Phải
-    ctx.moveTo(32, 14);  ctx.quadraticCurveTo(54, 10 + whiskerWiggle, 78, 8);
-    ctx.moveTo(33, 19);  ctx.quadraticCurveTo(56, 20, 80, 22);
-    ctx.moveTo(32, 24);  ctx.quadraticCurveTo(54, 28 - whiskerWiggle, 75, 33);
-    ctx.stroke();
+    // Quầng thâm dưới mắt (ốm, kiệt sức)
+    if (expr.eyeBags) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(99, 102, 241, 0.45)';
+      ctx.lineWidth = 2.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(-28, 4, 11, 0.35, Math.PI - 0.35);
+      ctx.moveTo(28 + 11 * Math.cos(0.35), 4 + 11 * Math.sin(0.35));
+      ctx.arc(28, 4, 11, 0.35, Math.PI - 0.35);
+      ctx.stroke();
+      ctx.restore();
+    }
 
-    // C. MŨI HỒNG ĐÀO HÌNH TAM GIÁC NHỎ
+    // Vạch u ám trên trán (ốm)
+    if (expr.sickTint) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(129, 140, 248, 0.55)';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      [-18, -6, 6, 18].forEach(x => {
+        ctx.moveTo(x, -40);
+        ctx.lineTo(x, -27);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Giọt nước mắt đọng ở mi dưới (đói lả)
+    if (expr.tear) {
+      const drip = (this.time * 0.6) % 1;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(-34, 7 + drip * 6);
+      ctx.quadraticCurveTo(-29, 15 + drip * 6, -34, 17 + drip * 6);
+      ctx.quadraticCurveTo(-39, 15 + drip * 6, -34, 7 + drip * 6);
+      ctx.fillStyle = 'rgba(125, 211, 252, 0.9)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // C. Đệm râu hai bên mõm (chữ ω)
+    ctx.fillStyle = p.belly;
     ctx.beginPath();
-    ctx.moveTo(0, 13);
-    ctx.lineTo(-5.5, 7);
-    ctx.lineTo(5.5, 7);
+    ctx.ellipse(-9, 16, 11, 8, 0.1, 0, Math.PI * 2);
+    ctx.ellipse(9, 16, 11, 8, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+    [[-13, 13], [-9, 17], [-15, 18], [13, 13], [9, 17], [15, 18]].forEach(([dx, dy]) => {
+      ctx.beginPath();
+      ctx.arc(dx, dy, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // D. Râu
+    this.renderWhiskers(ctx, p);
+
+    // E. Miệng (vẽ trước mũi để mũi nằm trên nhân trung); đồ ăn kề miệng thì há chờ
+    const waitingFood = this.foodDrag && this.foodDrag.near && state !== 'SLEEPING' && !HOSTILE_STATES.includes(state);
+    this.renderMouth(ctx, waitingFood ? 'meow' : expr.mouth, p);
+
+    // F. Mũi bo tròn có đốm sáng
+    ctx.beginPath();
+    ctx.moveTo(-6.5, 6.5);
+    ctx.quadraticCurveTo(0, 4, 6.5, 6.5);
+    ctx.quadraticCurveTo(4.5, 11, 0, 13);
+    ctx.quadraticCurveTo(-4.5, 11, -6.5, 6.5);
     ctx.closePath();
     ctx.fillStyle = p.nose;
     ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(-1.8, 7.6, 2.2, 1.2, -0.2, 0, Math.PI * 2);
+    ctx.fill();
 
-    // D. NỤ CƯỜI CHỮ :3 (CAT SMILE)
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.4;
-    ctx.lineCap = 'round';
-
-    if (state === 'YAWNING') {
+    // Nhăn sống mũi khi rít
+    if (expr.noseWrinkle) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.ellipse(0, 21, 14, 18, 0, 0, Math.PI * 2);
-      ctx.fillStyle = '#991b1b';
-      ctx.fill();
+      ctx.moveTo(-6, 2); ctx.quadraticCurveTo(0, -1, 6, 2);
+      ctx.moveTo(-5, -2); ctx.quadraticCurveTo(0, -5, 5, -2);
       ctx.stroke();
-
-      ctx.beginPath();
-      ctx.ellipse(0, 28, 9, 9, 0, 0, Math.PI * 2);
-      ctx.fillStyle = '#f43f5e';
-      ctx.fill();
-    } else if (state === 'EATING') {
-      const mouthOpen = Math.abs(this.chewCycle) * 6;
-      ctx.beginPath();
-      ctx.ellipse(0, 17, 7, 3 + mouthOpen, 0, 0, Math.PI * 2);
-      ctx.fillStyle = '#991b1b';
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.arc(-6.5, 17, 6.5, 0.15, Math.PI - 0.15);
-      ctx.arc(6.5, 17, 6.5, 0.15, Math.PI - 0.15);
-      ctx.stroke();
+      ctx.restore();
     }
 
-    // E. ĐÔI MẮT BIỂU CẢM (THE EYES)
-    const eyeSpacing = 28;
-    const eyeY = -4;
-    const isPettingNow = state === 'PETTING' || this.isPetting || this.purrIntensity > 0.08;
-
-    if (isPettingNow) {
-      // 1. KHI ĐƯỢC VUỐT VE: MẮT CƯỜI HÍP TỊT HÌNH CUNG ^ ^ (Y HỆT ẢNH MẪU!)
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 4.0;
-      ctx.lineCap = 'round';
-
-      // Mắt trái ^
-      ctx.beginPath();
-      ctx.moveTo(-eyeSpacing - 14, eyeY + 6);
-      ctx.quadraticCurveTo(-eyeSpacing, eyeY - 11, -eyeSpacing + 14, eyeY + 6);
-      ctx.stroke();
-
-      // Mắt phải ^
-      ctx.beginPath();
-      ctx.moveTo(eyeSpacing - 14, eyeY + 6);
-      ctx.quadraticCurveTo(eyeSpacing, eyeY - 11, eyeSpacing + 14, eyeY + 6);
-      ctx.stroke();
-
-      // Lông mi đuôi mắt cong vút cực duyên
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(-eyeSpacing + 14, eyeY + 6); ctx.lineTo(-eyeSpacing + 20, eyeY + 1);
-      ctx.moveTo(eyeSpacing + 14, eyeY + 6);  ctx.lineTo(eyeSpacing + 20, eyeY + 1);
-      ctx.stroke();
-
-    } else if (this.isBlinking || state === 'SLEEPING') {
-      // 2. KHI CHỚP MẮT HOẶC NGỦ SAY: CUNG MẮT NHẮM THƯ THÁI ⌒ ⌒
-      ctx.strokeStyle = '#0f172a';
+    // H. Dấu gân giận 💢 trên trán khi cáu, đập theo nhịp
+    if (HOSTILE_STATES.includes(state)) {
+      const beat = 1 + Math.max(0, Math.sin(this.time * 9)) * 0.18;
+      ctx.save();
+      ctx.translate(46, -36);
+      ctx.scale(beat, beat);
+      ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 3.2;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.arc(-eyeSpacing, eyeY + 2, 11, 3.4, 6.0);
-      ctx.arc(eyeSpacing, eyeY + 2, 11, 3.4, 6.0);
+      // Bốn cung cong quay lưng vào nhau như ký hiệu 💢
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+        ctx.moveTo(sx * 2.5, sy * 8);
+        ctx.quadraticCurveTo(sx * 2.5, sy * 2.5, sx * 8, sy * 2.5);
+      });
       ctx.stroke();
+      ctx.restore();
+    }
 
-    } else if (state === 'BEGGING') {
-      // 3. XIN ĂN: MẮT ANIME LONG LANH
-      this.renderKawaiiEye(ctx, -eyeSpacing, eyeY, p.eyeColor, 15);
-      this.renderKawaiiEye(ctx, eyeSpacing, eyeY, p.eyeColor, 15);
-
-    } else {
-      // 4. BÌNH THƯỜNG / SĂN MỒI: MẮT DÕI THEO CHUỘT
-      const isHunting = state === 'PLAYING';
-      this.renderTrackingEye(ctx, -eyeSpacing, eyeY, p.eyeColor, isHunting ? 14.5 : 13, isHunting, headX, headY);
-      this.renderTrackingEye(ctx, eyeSpacing, eyeY, p.eyeColor, isHunting ? 14.5 : 13, isHunting, headX, headY);
+    // G. Giọt mồ hôi khi dỗi
+    if (state === 'SULKING') {
+      ctx.beginPath();
+      ctx.moveTo(56, -30);
+      ctx.quadraticCurveTo(64, -16, 56, -12);
+      ctx.quadraticCurveTo(48, -16, 56, -30);
+      ctx.fillStyle = 'rgba(125, 211, 252, 0.9)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(2, 132, 199, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
 
     ctx.restore();
   }
 
-  renderTrackingEye(ctx, cx, cy, eyeColor, radius, isHunting, headX, headY) {
-    // Tròng mắt hình quả hạnh nhân mềm mại (Almond kawaii cat eyes)
+  // Mắt mèo: side -1 trái, +1 phải. Mống mắt phủ kín, đồng tử elip dọc, mí trên theo rig
+  renderCatEye(ctx, cx, cy, r, side, style, p, look) {
+    const rig = this.rig;
+    const open = this.isBlinking ? 0 : rig.eyeOpen;
+
+    if (style === 'happy' || style === 'squeeze') {
+      this.renderEyeArc(ctx, cx, cy, r, side, style);
+      return;
+    }
+    if (style === 'kawaii') {
+      this.renderKawaiiEye(ctx, cx, cy, p.eyeColor, r * 1.12);
+      return;
+    }
+    if (style === 'closed' || open < 0.12) {
+      this.renderEyeArc(ctx, cx, cy, r, side, 'closed');
+      return;
+    }
+
+    const w = r * 1.08;
+    const h = r * 0.95 * Math.max(1, open);
+    const tilt = side * 0.12; // đuôi mắt hơi xếch lên
+
+    const eyePath = () => {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, w, h, tilt, 0, Math.PI * 2);
+    };
+
+    ctx.save();
+    eyePath();
+    ctx.clip();
+
+    // Mống mắt phủ kín: màu lông mắt, viền tối, đáy sáng
+    ctx.fillStyle = p.eyeColor;
+    ctx.fillRect(cx - w - 2, cy - h - 2, w * 2 + 4, h * 2 + 4);
+    const shade = ctx.createRadialGradient(cx, cy + h * 0.2, r * 0.2, cx, cy, r * 1.15);
+    shade.addColorStop(0, 'rgba(255, 255, 255, 0.28)');
+    shade.addColorStop(0.6, 'rgba(255, 255, 255, 0)');
+    shade.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(cx - w - 2, cy - h - 2, w * 2 + 4, h * 2 + 4);
+
+    // Hướng nhìn: theo con trỏ, hoặc hướng cố định của biểu cảm (nhìn đi chỗ khác)
+    const maxLook = r * 0.32;
+    let lookX = 0;
+    let lookY = 0;
+    if (look) {
+      lookX = look.x * maxLook;
+      lookY = look.y * maxLook;
+    } else {
+      const s = this.scale;
+      const gx = this.x + (CAT_HEAD.x + rig.headDX + cx) * s;
+      const gy = this.y + (CAT_HEAD.y + rig.headDY + cy) * s;
+      const dx = this.mouseX - gx;
+      const dy = this.mouseY - gy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0) {
+        lookX = (dx / dist) * Math.min(dist * 0.05, maxLook);
+        lookY = (dy / dist) * Math.min(dist * 0.05, maxLook);
+      }
+    }
+
+    // Đồng tử: khe dọc khi nhỏ, tròn khi giãn
+    const pupil = Math.max(0.1, Math.min(1, rig.pupil));
     ctx.beginPath();
-    ctx.ellipse(cx, cy, radius * 1.05, radius * 0.95, 0, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
-    ctx.lineWidth = 2.6;
-    ctx.strokeStyle = '#0f172a';
-    ctx.stroke();
-
-    // Tọa độ mắt tuyệt đối trên canvas
-    const eyeGlobalX = this.x + (headX + cx) * this.scale;
-    const eyeGlobalY = this.y + (headY + cy) * this.scale;
-    const dx = this.mouseX - eyeGlobalX;
-    const dy = this.mouseY - eyeGlobalY;
-    const dist = Math.hypot(dx, dy);
-    const maxLook = radius * 0.35;
-    const lookX = dist > 0 ? (dx / dist) * Math.min(dist * 0.05, maxLook) : 0;
-    const lookY = dist > 0 ? (dy / dist) * Math.min(dist * 0.05, maxLook) : 0;
-
-    const pupilX = cx + lookX;
-    const pupilY = cy + lookY;
-
-    // Iris mắt mèo ngọc lục bảo sâu thẳm
-    const irisGrad = ctx.createRadialGradient(pupilX, pupilY, 1, pupilX, pupilY, radius * 0.85);
-    irisGrad.addColorStop(0, '#0f172a');
-    irisGrad.addColorStop(0.55, eyeColor);
-    irisGrad.addColorStop(1, '#064e3b');
-
-    ctx.beginPath();
-    ctx.arc(pupilX, pupilY, radius * 0.82, 0, Math.PI * 2);
-    ctx.fillStyle = irisGrad;
-    ctx.fill();
-
-    // Con ngươi đen
-    const pupilR = isHunting ? radius * 0.54 : radius * 0.36;
-    ctx.beginPath();
-    ctx.arc(pupilX, pupilY, pupilR, 0, Math.PI * 2);
+    ctx.ellipse(cx + lookX, cy + lookY, r * (0.14 + 0.62 * pupil), r * (0.78 + 0.12 * pupil), 0, 0, Math.PI * 2);
     ctx.fillStyle = '#0f172a';
     ctx.fill();
 
-    // 2 đốm sáng phản chiếu long lanh
+    // Đốm sáng phản chiếu
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(pupilX - radius * 0.28, pupilY - radius * 0.28, radius * 0.32, 0, Math.PI * 2);
+    ctx.arc(cx - r * 0.34 + lookX * 0.3, cy - r * 0.36, r * 0.27, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(pupilX + radius * 0.25, pupilY + radius * 0.25, radius * 0.16, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.3 + lookX * 0.3, cy + r * 0.3, r * 0.12, 0, Math.PI * 2);
     ctx.fill();
 
-    // Mí mắt trên mềm mại
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.8;
+    // Mí trên: hạ theo eyeOpen, nghiêng theo lidTilt (buồn: đuôi mí cụp; cau: đầu mí cụp)
+    const lidY = cy - h + 2 * h * (1 - Math.min(1, open));
+    const xOuter = cx + side * (w + 2);
+    const xInner = cx - side * (w + 2);
+    const yOuter = lidY + rig.lidTilt * h * 0.7;
+    const yInner = lidY - rig.lidTilt * h * 0.7;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 1.05, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.moveTo(xInner, yInner);
+    ctx.lineTo(xOuter, yOuter);
+    ctx.lineTo(xOuter, cy - h - 6);
+    ctx.lineTo(xInner, cy - h - 6);
+    ctx.closePath();
+    ctx.fillStyle = p.main;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(xInner, yInner);
+    ctx.lineTo(xOuter, yOuter);
+    ctx.lineWidth = 3.2;
+    ctx.strokeStyle = '#0f172a';
     ctx.stroke();
+
+    ctx.restore();
+
+    // Viền mắt + mi trên đậm
+    eyePath();
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = '#0f172a';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, w, h, tilt, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.lineWidth = 3.4;
+    ctx.stroke();
+  }
+
+  // Mắt nhắm: 'happy' ^ ^ (cười), 'closed' ︶ (ngủ, thư giãn), 'squeeze' > < (nhắm chặt)
+  renderEyeArc(ctx, cx, cy, r, side, style) {
+    ctx.save();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (style === 'happy') {
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(cx - 14, cy + 6);
+      ctx.quadraticCurveTo(cx, cy - 11, cx + 14, cy + 6);
+      ctx.stroke();
+      // Lông mi cong ở đuôi mắt
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 14, cy + 6);
+      ctx.lineTo(cx + side * 20, cy + 1);
+      ctx.stroke();
+    } else if (style === 'squeeze') {
+      ctx.lineWidth = 3.6;
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 11, cy - 7);
+      ctx.lineTo(cx - side * 9, cy + 1);
+      ctx.lineTo(cx + side * 11, cy + 8);
+      ctx.stroke();
+    } else {
+      ctx.lineWidth = 3.4;
+      ctx.beginPath();
+      ctx.arc(cx, cy - 2, r * 0.95, 0.35, Math.PI - 0.35);
+      ctx.stroke();
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(cx + side * r * 0.85, cy + 3);
+      ctx.lineTo(cx + side * (r * 0.85 + 5), cy + 6);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Lông mày hoạt hình theo lidTilt: < 0 cau có (đầu mày trong hạ), > 0 lo lắng/nài nỉ (đầu mày trong nhướn)
+  renderBrows(ctx, p) {
+    const t = this.rig.lidTilt;
+    const strength = Math.min(1, (Math.abs(t) - 0.2) * 2.5);
+    if (strength <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = strength;
+    ctx.strokeStyle = p.whisker ? 'rgba(226, 232, 240, 0.9)' : 'rgba(15, 23, 42, 0.8)';
+    ctx.lineWidth = 3.6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    [-1, 1].forEach(side => {
+      const innerY = -21 - t * 6;
+      const outerY = -21 + t * 4;
+      ctx.moveTo(side * 15, innerY);
+      ctx.quadraticCurveTo(side * 28, (innerY + outerY) / 2 - 2, side * 40, outerY);
+    });
+    ctx.stroke();
+    ctx.restore();
   }
 
   renderKawaiiEye(ctx, cx, cy, eyeColor, radius) {
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#0f172a';
     ctx.fill();
-    ctx.lineWidth = 2.8;
-    ctx.strokeStyle = '#0f172a';
-    ctx.stroke();
 
     const grad = ctx.createLinearGradient(cx, cy - radius, cx, cy + radius);
     grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(0.5, eyeColor);
-    grad.addColorStop(1, '#a7f3d0');
+    grad.addColorStop(0.55, eyeColor);
+    grad.addColorStop(1, '#ecfccb');
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.88, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
 
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.86, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
+    ctx.ellipse(cx, cy + radius * 0.05, radius * 0.4, radius * 0.6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
     ctx.fill();
 
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(cx - 4, cy - 5, 5.5, 0, Math.PI * 2);
-    ctx.arc(cx + 4, cy + 4, 3.2, 0, Math.PI * 2);
-    ctx.arc(cx - 3, cy + 6, 2.2, 0, Math.PI * 2);
+    ctx.arc(cx - radius * 0.32, cy - radius * 0.36, radius * 0.34, 0, Math.PI * 2);
+    ctx.arc(cx + radius * 0.3, cy + radius * 0.3, radius * 0.2, 0, Math.PI * 2);
+    ctx.arc(cx - radius * 0.2, cy + radius * 0.45, radius * 0.12, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.lineWidth = 2.8;
+    ctx.strokeStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Râu: whisker > 0 chĩa ra trước và xoè (tò mò), < 0 cụp sát má (sợ, cáu)
+  renderWhiskers(ctx, p) {
+    const w = this.rig.whisker;
+    const wiggle = Math.sin(this.time * 3) * 0.03;
+    const len = 46 * (1 + 0.1 * w);
+    ctx.save();
+    ctx.strokeStyle = p.whisker || 'rgba(15, 23, 42, 0.6)';
+    ctx.lineWidth = 1.9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    [-1, 1].forEach(side => {
+      [-0.14, 0.08, 0.3].forEach((base, i) => {
+        const a = base * (1 + 0.35 * w) - w * 0.18 + (i === 0 ? wiggle : -wiggle);
+        const ox = side * 17;
+        const oy = 13 + i * 4;
+        const ex = ox + side * Math.cos(a) * len;
+        const ey = oy + Math.sin(a) * len;
+        ctx.moveTo(ox, oy);
+        ctx.quadraticCurveTo(ox + side * len * 0.5, oy + Math.sin(a) * len * 0.35 - 3, ex, ey);
+      });
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Miệng theo kiểu biểu cảm; mouthOpen của rig quyết định độ há
+  renderMouth(ctx, style, p) {
+    const open = Math.max(0, Math.min(1, this.rig.mouthOpen));
+    const dark = '#0f172a';
+    const inside = '#9f1239';
+    const tongue = '#fb7185';
+
+    ctx.save();
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 2.3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Nhân trung từ mũi xuống
+    ctx.beginPath();
+    ctx.moveTo(0, 12);
+    ctx.lineTo(0, 16.5);
+    ctx.stroke();
+
+    const omega = () => {
+      ctx.beginPath();
+      ctx.arc(-6, 17, 6, 0.15, Math.PI - 0.15);
+      ctx.arc(6, 17, 6, 0.15, Math.PI - 0.15);
+      ctx.stroke();
+    };
+
+    switch (style) {
+      case 'open': {
+        // Há miệng cười
+        ctx.beginPath();
+        ctx.moveTo(-11, 18);
+        ctx.quadraticCurveTo(0, 15, 11, 18);
+        ctx.quadraticCurveTo(0, 34, -11, 18);
+        ctx.closePath();
+        ctx.fillStyle = inside;
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, 26, 6, 3.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = tongue;
+        ctx.fill();
+        break;
+      }
+      case 'meow': {
+        const h = 4 + open * 14;
+        ctx.beginPath();
+        ctx.moveTo(-8, 17);
+        ctx.quadraticCurveTo(0, 15, 8, 17);
+        ctx.quadraticCurveTo(4, 17 + h, 0, 17 + h);
+        ctx.quadraticCurveTo(-4, 17 + h, -8, 17);
+        ctx.closePath();
+        ctx.fillStyle = inside;
+        ctx.fill();
+        ctx.stroke();
+        if (h > 9) {
+          ctx.beginPath();
+          ctx.ellipse(0, 15 + h, 4, 2.5, 0, 0, Math.PI * 2);
+          ctx.fillStyle = tongue;
+          ctx.fill();
+        }
+        break;
+      }
+      case 'yawn': {
+        const h = 6 + open * 14;
+        ctx.beginPath();
+        ctx.ellipse(0, 18 + h * 0.55, 13, h, 0, 0, Math.PI * 2);
+        ctx.fillStyle = inside;
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, 18 + h * 1.1, 8, 5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = tongue;
+        ctx.fill();
+        // Răng nanh ở hàm trên
+        const fangY = 18 - h * 0.45 + h * 0.35;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(-9, fangY); ctx.lineTo(-5, fangY); ctx.lineTo(-7, fangY + 6); ctx.closePath();
+        ctx.moveTo(5, fangY);  ctx.lineTo(9, fangY);  ctx.lineTo(7, fangY + 6);  ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case 'chew': {
+        const h = 3 + Math.abs(this.chewCycle) * 6;
+        ctx.beginPath();
+        ctx.ellipse(0, 19, 7, h, 0, 0, Math.PI * 2);
+        ctx.fillStyle = inside;
+        ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case 'lick': {
+        omega();
+        const wag = Math.sin(this.time * 9) * 2;
+        ctx.beginPath();
+        ctx.ellipse(-3 + wag, 25, 5, 7, 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = tongue;
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        break;
+      }
+      case 'blep': {
+        omega();
+        ctx.beginPath();
+        ctx.moveTo(-4, 21);
+        ctx.lineTo(4, 21);
+        ctx.quadraticCurveTo(4, 28, 0, 28);
+        ctx.quadraticCurveTo(-4, 28, -4, 21);
+        ctx.closePath();
+        ctx.fillStyle = tongue;
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        break;
+      }
+      case 'o': {
+        ctx.beginPath();
+        ctx.ellipse(0, 22, 5, 4 + open * 5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = inside;
+        ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case 'pout': {
+        // Bĩu môi: hai cung úp xuống
+        ctx.beginPath();
+        ctx.arc(-5, 22, 5, Math.PI + 0.4, Math.PI * 2 - 0.4);
+        ctx.moveTo(10, 20.5);
+        ctx.arc(5, 22, 5, Math.PI + 0.4, Math.PI * 2 - 0.4);
+        ctx.stroke();
+        break;
+      }
+      case 'flat': {
+        // Mím môi khó chịu
+        ctx.beginPath();
+        ctx.moveTo(-10, 21);
+        ctx.quadraticCurveTo(0, 17.5, 10, 21);
+        ctx.stroke();
+        break;
+      }
+      case 'wobble': {
+        // Ốm: miệng run run hình sóng nhỏ
+        ctx.beginPath();
+        ctx.moveTo(-9, 21);
+        ctx.quadraticCurveTo(-6, 18, -3, 21);
+        ctx.quadraticCurveTo(0, 24, 3, 21);
+        ctx.quadraticCurveTo(6, 18, 9, 21);
+        ctx.stroke();
+        break;
+      }
+      case 'licklips': {
+        // No căng: liếm mép, lưỡi quét qua lại
+        omega();
+        const lx = Math.sin(this.time * 4) * 6;
+        ctx.beginPath();
+        ctx.ellipse(lx, 22.5, 4.5, 3.2, 0, 0, Math.PI * 2);
+        ctx.fillStyle = tongue;
+        ctx.fill();
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        break;
+      }
+      case 'hiss': {
+        // Rít: há rộng, lộ 4 răng nanh, lưỡi cong
+        const h = 10 + open * 10;
+        ctx.beginPath();
+        ctx.moveTo(-15, 17);
+        ctx.quadraticCurveTo(-7, 13, 0, 15);
+        ctx.quadraticCurveTo(7, 13, 15, 17);
+        ctx.quadraticCurveTo(12, 17 + h, 0, 17 + h);
+        ctx.quadraticCurveTo(-12, 17 + h, -15, 17);
+        ctx.closePath();
+        ctx.fillStyle = inside;
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, 13 + h, 6, 3, 0, Math.PI, Math.PI * 2);
+        ctx.fillStyle = tongue;
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(-10, 16); ctx.lineTo(-6, 16); ctx.lineTo(-8, 23); ctx.closePath();
+        ctx.moveTo(6, 16);   ctx.lineTo(10, 16); ctx.lineTo(8, 23);  ctx.closePath();
+        ctx.moveTo(-8, 17 + h); ctx.lineTo(-5, 17 + h); ctx.lineTo(-6.5, 12 + h); ctx.closePath();
+        ctx.moveTo(5, 17 + h);  ctx.lineTo(8, 17 + h);  ctx.lineTo(6.5, 12 + h);  ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case 'grumble': {
+        // Cáu: miệng gằn hình sóng, một răng nanh nhú ra
+        ctx.beginPath();
+        ctx.moveTo(-11, 22);
+        ctx.quadraticCurveTo(-5.5, 17, 0, 20);
+        ctx.quadraticCurveTo(5.5, 17, 11, 22);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(4, 19.2);
+        ctx.lineTo(8, 19.8);
+        ctx.lineTo(6.2, 25);
+        ctx.closePath();
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        break;
+      }
+      case 'smile':
+      default:
+        omega();
+        break;
+    }
+    ctx.restore();
   }
 
   // --- 7. PHỤ KIỆN & TRANG PHỤC ---
-  renderCostumes(ctx, customization) {
-    const headX = 42;
-    const headY = -28;
-
+  // Phụ kiện cổ (toạ độ thân)
+  renderNeckCostume(ctx, customization) {
     if (customization.accessory === 'red_bowtie') {
       ctx.save();
-      ctx.translate(headX, 22);
+      ctx.translate(CAT_HEAD.x, 22);
       ctx.fillStyle = '#ef4444';
       ctx.beginPath();
       ctx.moveTo(0, 0); ctx.lineTo(-20, -10); ctx.lineTo(-20, 10); ctx.closePath();
@@ -1195,7 +1978,7 @@ class CatRenderer {
       ctx.restore();
     } else if (customization.accessory === 'gold_bell') {
       ctx.save();
-      ctx.translate(headX, 22);
+      ctx.translate(CAT_HEAD.x, 22);
       ctx.beginPath();
       ctx.ellipse(0, -2, 34, 10, 0, 0, Math.PI * 2);
       ctx.lineWidth = 5;
@@ -1210,10 +1993,13 @@ class CatRenderer {
       ctx.stroke();
       ctx.restore();
     }
+  }
 
+  // Kính và mũ (toạ độ quanh tâm đầu, nghiêng theo đầu)
+  renderHeadCostumes(ctx, customization) {
     if (customization.glasses === 'sunglasses') {
       ctx.save();
-      ctx.translate(headX, headY - 6);
+      ctx.translate(0, -6);
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(-45, -8, 38, 18);
       ctx.fillRect(7, -8, 38, 18);
@@ -1224,11 +2010,12 @@ class CatRenderer {
       ctx.restore();
     } else if (customization.glasses === 'round_glasses') {
       ctx.save();
-      ctx.translate(headX, headY - 6);
+      ctx.translate(0, -6);
       ctx.strokeStyle = '#d97706';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(-26, 0, 14, 0, Math.PI * 2);
+      ctx.moveTo(40, 0);
       ctx.arc(26, 0, 14, 0, Math.PI * 2);
       ctx.moveTo(-12, 0); ctx.lineTo(12, 0);
       ctx.stroke();
@@ -1237,7 +2024,7 @@ class CatRenderer {
 
     if (customization.hat === 'party_hat') {
       ctx.save();
-      ctx.translate(headX, headY - 45);
+      ctx.translate(0, -45);
       ctx.beginPath();
       ctx.moveTo(-22, 10); ctx.lineTo(0, -45); ctx.lineTo(22, 10); ctx.closePath();
       ctx.fillStyle = '#38bdf8';
@@ -1258,7 +2045,7 @@ class CatRenderer {
       ctx.restore();
     } else if (customization.hat === 'chef_hat') {
       ctx.save();
-      ctx.translate(headX, headY - 45);
+      ctx.translate(0, -45);
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(-26, -5, 52, 15);
       ctx.beginPath();
@@ -1272,7 +2059,7 @@ class CatRenderer {
       ctx.restore();
     } else if (customization.hat === 'wizard_hat') {
       ctx.save();
-      ctx.translate(headX, headY - 45);
+      ctx.translate(0, -45);
       ctx.beginPath();
       ctx.ellipse(0, 10, 42, 12, 0, 0, Math.PI * 2);
       ctx.fillStyle = '#581c87';
@@ -1290,6 +2077,28 @@ class CatRenderer {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  // Vùng thả đồ ăn: vòng nét đứt quanh mèo khi đang kéo, sáng vàng khi con trỏ ở trên mèo
+  renderFoodDropZone() {
+    if (!this.foodDrag) return;
+    const ctx = this.ctx;
+    const s = this.scale;
+    const near = this.foodDrag.near;
+    ctx.save();
+    ctx.translate(this.x + 10 * s, this.y - 10 * s);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 125 * s, 85 * s, 0, 0, Math.PI * 2);
+    ctx.setLineDash([10 * s, 8 * s]);
+    ctx.lineDashOffset = -this.time * 30;
+    ctx.lineWidth = (near ? 4 : 2.5) * s;
+    ctx.strokeStyle = near ? 'rgba(250, 204, 21, 0.95)' : 'rgba(255, 255, 255, 0.45)';
+    ctx.stroke();
+    if (near) {
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.08)';
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // --- ĐỒ CHƠI TƯƠNG TÁC ---

@@ -5,6 +5,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Initialize Renderer & Engine
   const renderer = new CatRenderer('cat-canvas');
+  // Các khối UI che sàn phòng: renderer chọn chỗ trên thảm để mèo không bị chúng che
+  renderer.getBlockedRects = () =>
+    [...document.querySelectorAll('.bottom-inventory-dock, .current-action-card, .right-actions-menu, .top-left-panel, .quests-card')]
+      .map(el => el.getBoundingClientRect());
   const state = window.gameState;
   const audio = window.catAudio;
 
@@ -49,6 +53,32 @@ document.addEventListener('DOMContentLoaded', () => {
         vy: -80 - Math.random() * 80
       });
     }
+  };
+
+  // --- OFFLINE GIFTS MODAL ---
+  const formatAway = (seconds) => {
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} phút`;
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `${hours} giờ ${rest} phút` : `${hours} giờ`;
+  };
+
+  const showGiftModal = (awaySeconds) => {
+    const gifts = state.data.pendingGifts;
+    if (!gifts.length) return;
+    document.getElementById('gift-away-text').textContent =
+      awaySeconds ? `Bạn vắng mặt ${formatAway(awaySeconds)}` : 'Bạn vừa quay lại';
+    const list = document.getElementById('gift-list');
+    list.innerHTML = '';
+    gifts.forEach(g => {
+      const item = document.createElement('div');
+      item.className = 'gift-item';
+      item.innerHTML = `<span class="gift-icon">${g.icon}</span><span>${g.label}</span>` +
+        `<span class="gift-amount">${g.type === 'coins' ? `+${g.amount} xu` : `x${g.amount}`}</span>`;
+      list.appendChild(item);
+    });
+    document.getElementById('gift-modal').classList.add('open');
   };
 
   // --- RENDER HUD UPDATES ---
@@ -127,6 +157,48 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'PLAYING':
         bubbleText.textContent = 'Bắt lấy nè! Chụp trúng rồi! 🪶';
         break;
+      case 'SULKING':
+        bubbleText.textContent = 'Hừm... chẳng ai chơi với mèo cả 😿';
+        break;
+      case 'SLOW_BLINK':
+        bubbleText.textContent = 'Nháy mắt... thương sen lắm đó 😌';
+        break;
+      case 'CURIOUS':
+        bubbleText.textContent = 'Ơ? Cái gì kia ta? ❓';
+        break;
+      case 'SURPRISED':
+        bubbleText.textContent = 'Ối giật cả mình! 🙀';
+        break;
+      case 'ANNOYED':
+        bubbleText.textContent = 'Đủ rồi mà! Để mèo yên chút 💢';
+        break;
+      case 'KNEADING':
+        bubbleText.textContent = 'Nhồi bột nhồi bột... rừ rừ 🍞';
+        break;
+      case 'BLEP':
+        bubbleText.textContent = 'Blep 😛';
+        break;
+      case 'GREETING':
+        bubbleText.textContent = 'Mrrr~ Sen về rồi! 💛';
+        break;
+      case 'GROOMING':
+        bubbleText.textContent = 'Rửa mặt cho thơm tho nè 🧼';
+        break;
+      case 'SICK':
+        bubbleText.textContent = 'Meo... mèo thấy không khoẻ 🤒';
+        break;
+      case 'EXHAUSTED':
+        bubbleText.textContent = 'Buồn ngủ quá... không chơi nổi nữa 😪';
+        break;
+      case 'STARVING':
+        bubbleText.textContent = 'Meo... đói lả cả người rồi 😿';
+        break;
+      case 'FULL':
+        bubbleText.textContent = 'No căng bụng rồi, ăn thêm không nổi 😋';
+        break;
+      case 'HISS':
+        bubbleText.textContent = 'Khèèè! 😾';
+        break;
       default:
         if (v.hunger < 35) {
           bubbleText.textContent = 'Bụng đang réo meo meo nè...';
@@ -160,23 +232,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       foods.forEach(f => {
         const slot = document.createElement('div');
-        slot.className = 'inventory-slot ui-interactive';
+        slot.className = 'inventory-slot ui-interactive food-draggable';
+        slot.title = 'Kéo thả vào bé mèo để cho ăn';
         slot.innerHTML = `
           <div class="slot-badge">x${f.count}</div>
           <div class="slot-icon">${f.icon}</div>
           <div class="slot-name">${f.name}</div>
         `;
-        slot.addEventListener('click', () => {
-          if (f.count > 0) {
-            renderer.dropFood(f.id);
-            state.feed(f.id);
-            window.showToast(`🐾 Cho bé mèo ăn <b>${f.name}</b>!`);
-            if (window.officeNetwork) {
-              window.officeNetwork.broadcastAction('feed', `vừa cho mèo ăn ${f.name} (${f.icon})`, f.icon, '#f59e0b');
-            }
-          } else {
+        // Cho ăn bằng kéo thả: nhấn giữ món ăn rồi thả vào mèo
+        slot.addEventListener('pointerdown', (e) => {
+          if (f.count <= 0) {
             window.showToast(`⚠️ Hết ${f.name} rồi! Bấm "Mua thêm" bên cạnh nhé.`);
+            return;
           }
+          e.preventDefault();
+          beginFoodDrag(f, e);
         });
         row.appendChild(slot);
       });
@@ -218,12 +288,13 @@ document.addEventListener('DOMContentLoaded', () => {
               if (window.officeNetwork) {
                 window.officeNetwork.broadcastAction('toy', `vừa cất đồ chơi ${t.name}`, '📦', '#64748b');
               }
-            } else {
-              state.playWithToy(t.id);
+            } else if (state.playWithToy(t.id)) {
               window.showToast(`🎮 Đang chơi <b>${t.name}</b> cùng mèo!`);
               if (window.officeNetwork) {
                 window.officeNetwork.broadcastAction('toy', `vừa chơi ${t.name} (${t.icon}) cùng mèo!`, t.icon, '#06b6d4');
               }
+            } else {
+              window.showToast('😪 Mèo kiệt sức rồi, cho bé ngủ một giấc đã nhé!');
             }
           } else {
             window.showToast(`🔒 Bạn chưa có ${t.name}! Hãy vào Shop để mua nhé.`);
@@ -368,12 +439,62 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // --- QUICK RIGHT ACTION BUTTONS ---
-  document.getElementById('btn-quick-feed').addEventListener('click', () => {
-    // Switch to food tab
-    document.querySelector('.tab-pill[data-tab="food"]').click();
-    window.showToast('🥣 Chọn một món ăn bên dưới để nạp năng lượng cho mèo!');
+  // --- KÉO THẢ ĐỒ ĂN VÀO MÈO ---
+  // Món ăn bay theo con trỏ (phần tử HTML nằm trên mọi lớp UI); renderer cho mèo phản ứng
+  // và báo con trỏ có đang ở trên mèo không. Nhấn rồi nhả tại chỗ chỉ hiện hướng dẫn.
+  let foodDrag = null; // { food, ghost, startX, startY, moved }
+
+  function beginFoodDrag(food, e) {
+    if (foodDrag) foodDrag.ghost.remove(); // lần kéo trước chưa kết thúc (thiếu pointerup)
+    const ghost = document.createElement('div');
+    ghost.className = 'food-drag-ghost';
+    ghost.textContent = food.icon;
+    ghost.style.left = `${e.clientX}px`;
+    ghost.style.top = `${e.clientY}px`;
+    document.body.appendChild(ghost);
+    foodDrag = { food, ghost, startX: e.clientX, startY: e.clientY, moved: false };
+  }
+
+  function finishFoodDrag(e, cancelled) {
+    if (!foodDrag) return;
+    const { food, moved } = foodDrag;
+    foodDrag = null;
+    document.querySelectorAll('.food-drag-ghost').forEach(g => g.remove());
+    if (!cancelled && moved) renderer.setFoodDrag(food.id, e.clientX, e.clientY);
+    const dropped = renderer.endFoodDrag() && !cancelled && moved;
+
+    if (dropped && state.isFull()) {
+      // No căng: mèo từ chối, món ăn không bị trừ
+      state.feed(food.id);
+      window.showToast('😋 Bé no căng bụng rồi, để lát nữa hẵng ăn nhé!');
+    } else if (dropped) {
+      renderer.dropFood(food.id);
+      state.feed(food.id);
+      window.showToast(`🐾 Cho bé mèo ăn <b>${food.name}</b>!`);
+      if (window.officeNetwork) {
+        window.officeNetwork.broadcastAction('feed', `vừa cho mèo ăn ${food.name} (${food.icon})`, food.icon, '#f59e0b');
+      }
+    } else if (!moved) {
+      window.showToast(`🐾 Kéo <b>${food.name}</b> thả vào bé mèo để cho ăn nhé!`);
+    } else if (!cancelled) {
+      window.showToast('🙀 Thả trúng bé mèo mới ăn được nha ~');
+    }
+  }
+
+  window.addEventListener('pointermove', (e) => {
+    if (!foodDrag) return;
+    foodDrag.ghost.style.left = `${e.clientX}px`;
+    foodDrag.ghost.style.top = `${e.clientY}px`;
+    if (Math.hypot(e.clientX - foodDrag.startX, e.clientY - foodDrag.startY) > 6) foodDrag.moved = true;
+    if (foodDrag.moved) renderer.setFoodDrag(foodDrag.food.id, e.clientX, e.clientY);
   });
+  window.addEventListener('pointerup', (e) => finishFoodDrag(e, false));
+  window.addEventListener('pointercancel', (e) => finishFoodDrag(e, true));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') finishFoodDrag(e, true);
+  });
+
+  // --- QUICK RIGHT ACTION BUTTONS ---
 
   document.getElementById('btn-quick-pet').addEventListener('click', () => {
     renderer.triggerPetFeedback(true);
@@ -383,7 +504,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-quick-play').addEventListener('click', () => {
     // Switch to toy tab and activate feather wand
     document.querySelector('.tab-pill[data-tab="toy"]').click();
-    state.playWithToy('feather_wand');
+    if (!state.playWithToy('feather_wand')) {
+      window.showToast('😪 Mèo kiệt sức rồi, cho bé ngủ một giấc đã nhé!');
+      return;
+    }
     window.showToast('🪶 Rê chuột để vung vẩy cần câu lông vũ cho mèo vồ!');
     if (window.officeNetwork) {
       window.officeNetwork.broadcastAction('toy', 'vừa vung vẩy Cần câu lông vũ cho mèo vồ! 🪶', '🪶', '#06b6d4');
@@ -420,6 +544,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.catAudio) window.catAudio.yawn();
     if (window.officeNetwork) {
       window.officeNetwork.broadcastAction('stretch', 'vừa vuốt lưng cho mèo ngáp dài vươn vai 🥱', '🥱', '#f59e0b');
+    }
+  });
+
+  document.getElementById('btn-quick-blink').addEventListener('click', () => {
+    if (state.slowBlinkAtCat()) {
+      window.showToast('😌 Bạn nháy mắt chậm, bé mèo nháy lại: "mình tin bạn"!');
+      if (window.officeNetwork) {
+        window.officeNetwork.broadcastAction('blink', 'vừa nháy mắt chậm với mèo, mèo nháy lại đầy tin tưởng 😌', '😌', '#f472b6');
+      }
+    } else if (state.behaviorState === 'SLEEPING') {
+      window.showToast('💤 Mèo đang ngủ, không thấy bạn nháy mắt đâu ~');
+    } else {
+      window.showToast('👀 Mèo vẫn đang nhìn bạn... chờ chút rồi nháy lại nhé!');
     }
   });
 
@@ -483,7 +620,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('.modal-backdrop').forEach(modal => {
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal(modal);
+      // The gift modal only closes through "Nhận quà", so gifts are never skipped by accident.
+      if (e.target === modal && modal.id !== 'gift-modal') closeModal(modal);
     });
   });
 
@@ -655,6 +793,36 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial Theme & HUD render
   applyRoomTheme(state.data.customization.roomTheme);
   updateHUD(state.data);
+
+  // --- OFFLINE PROGRESS ---
+  const resumeFromAway = () => {
+    const result = state.applyOfflineProgress();
+    showGiftModal(result ? result.awaySeconds : null);
+  };
+
+  document.getElementById('btn-claim-gifts').addEventListener('click', () => {
+    const claimed = state.claimGifts();
+    closeModal(document.getElementById('gift-modal'));
+    if (claimed) {
+      window.showToast(`🎁 Đã nhận ${claimed.count} món quà${claimed.coins ? `, +${claimed.coins} xu` : ''}!`);
+    }
+  });
+
+  // Leaving the tab starts an away period; coming back applies it.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      state.markAway();
+    } else {
+      resumeFromAway();
+    }
+  });
+  window.addEventListener('pagehide', () => state.markAway());
+  // Keep lastSeen fresh while the tab is open so a crash does not look like a long absence.
+  setInterval(() => {
+    if (document.visibilityState === 'visible') state.save();
+  }, 15000);
+
+  resumeFromAway();
 
   // --- MAIN ANIMATION & VITALS LOOP ---
   let lastFrameTime = performance.now();
